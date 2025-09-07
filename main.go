@@ -2,10 +2,13 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"log"
 	"os"
 
 	_ "embed"
+
+	"github.com/Xmister/udf"
 )
 
 const version = "1.0.0-dev"
@@ -56,6 +59,23 @@ func main() {
 		if len(args) != 2 {
 			flashFlagSet.Usage()
 			os.Exit(1)
+		}
+
+		// Step 1: Read ISO
+		file, err := os.Open(args[0])
+		if err != nil {
+			log.Fatalf("Failed to open ISO: %v", err)
+		}
+		defer file.Close()
+		if !IsValidWindowsISO(file) {
+			log.Fatalf("This file is not recognised as a valid Windows ISO image!")
+		}
+		iso, err := udf.NewUdfFromReader(file)
+		if err != nil {
+			log.Fatalf("Failed to read UDF filesystem on ISO: %v", err)
+		}
+		for _, f := range iso.ReadDir(nil) {
+			fmt.Printf("%s %-10d %-20s %v\n", f.Mode().String(), f.Size(), f.Name(), f.ModTime())
 		}
 
 		return
