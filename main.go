@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"os/exec"
 
 	_ "embed"
 
@@ -28,12 +29,16 @@ var gptFlag = flashFlagSet.Bool("gpt", false,
 var primaryFsFlag = flashFlagSet.String("primary-fs", "exfat",
 	"Filesystem to use. If not using FAT32, UEFI:NTFS will be installed, and all\n"+
 		"ISO files will be stored on a single partition.\n"+
-		"Options: fat32, exfat, ntfs") // TODO: Support FAT32, NTFS
-var secondaryFsFlag = flashFlagSet.String("secondary-fs", "exfat",
-	"Filesystem to use for second partition if primary-fs=fat32 and ISO > 4GB\n"+
-		"Options: exfat, ntfs") // TODO: Make this work in combo with FAT32
-var disableValidationFlag = flashFlagSet.Bool("disable-validation", false,
-	"Disable validation of written files")
+		"Available options: ")
+
+/*
+	 TODO: Support FAT32 + secondary-fs
+		var secondaryFsFlag = flashFlagSet.String("secondary-fs", "exfat",
+			"Filesystem to use for second partition if primary-fs=fat32 and ISO > 4GB\n"+
+				"Options: exfat, ntfs")
+		var disableValidationFlag = flashFlagSet.Bool("disable-validation", false,
+			"Disable validation of written files")
+*/
 
 //go:embed binaries/uefi-ntfs.img
 var UEFI_NTFS_IMG []byte
@@ -62,6 +67,22 @@ func main() {
 		log.SetFlags(0)
 		log.SetOutput(os.Stderr)
 		log.SetPrefix("[glassUSB] ")
+
+		// Look for prerequisites on system
+		primaryFsFlagStruct := flashFlagSet.Lookup("primary-fs")
+		_, exfatErr := exec.LookPath("mkfs.exfat")
+		_, ntfsErr := exec.LookPath("mkfs.ntfs")
+		if ntfsErr != nil && exfatErr != nil {
+			log.Fatalln("Neither NTFS nor exFAT support were found on this system, exiting...")
+		} else if ntfsErr != nil {
+			primaryFsFlagStruct.Usage = primaryFsFlagStruct.Usage + "exfat"
+		} else if exfatErr != nil {
+			primaryFsFlagStruct.DefValue = "ntfs"
+			primaryFsFlagStruct.Value.Set("ntfs")
+			primaryFsFlagStruct.Usage = primaryFsFlagStruct.Usage + "ntfs"
+		} else {
+			primaryFsFlagStruct.Usage = primaryFsFlagStruct.Usage + "exfat, ntfs"
+		}
 		flashFlagSet.Parse(os.Args[2:])
 		args := flashFlagSet.Args()
 		if len(args) != 2 {
@@ -82,6 +103,7 @@ func main() {
 		if err != nil {
 			log.Fatalf("Failed to read UDF filesystem on ISO: %v", err)
 		}
+		// TODO: Remove this
 		for _, f := range iso.ReadDir(nil) {
 			fmt.Printf("%s %-10d %-20s %v\n", f.Mode().String(), f.Size(), f.Name(), f.ModTime())
 		}
@@ -95,9 +117,13 @@ func main() {
 		} */
 
 		// Step 3: Open the block device and create a new partition table
+		destStat, err := os.Stat(args[1])
+		if err != nil {
+			log.Fatalf("Failed to get info about destination: %v", err)
+		}
 		disk, err := diskfs.Open(args[1], diskfs.WithOpenMode(diskfs.ReadWrite))
 		if err != nil {
-			log.Fatalf("Failed to open block device: %v", err)
+			log.Fatalf("Failed to open destination: %v", err)
 		}
 		defer disk.Close()
 		var table partition.Table
@@ -138,7 +164,13 @@ func main() {
 			log.Fatalf("Failed to write UEFI:NTFS to first partition: %v", err)
 		}
 
-		// Step 5: Mount second partition and write ISO contents to it
+		// Step 5: Mount second partition and create exFAT/NTFS partition depending on primaryFs
+		//blockDevice := args[1]
+		if destStat.Mode().Perm()&os.ModeDevice != 0 {
+			// TODO: Support flashing to a loopback device
+		} else {
+			// TODO: Support flashing to a real device
+		}
 
 		return
 	} else {
