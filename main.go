@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"flag"
 	"fmt"
 	"log"
@@ -9,6 +10,10 @@ import (
 	_ "embed"
 
 	"github.com/Xmister/udf"
+	"github.com/diskfs/go-diskfs"
+	"github.com/diskfs/go-diskfs/partition"
+	"github.com/diskfs/go-diskfs/partition/gpt"
+	"github.com/diskfs/go-diskfs/partition/mbr"
 )
 
 const version = "1.0.0-dev"
@@ -20,15 +25,18 @@ var flashFlagSet = flag.NewFlagSet("flash", flag.ExitOnError)
 var gptFlag = flashFlagSet.Bool("gpt", false,
 	"Use GPT partitioning\n"+
 		"Note: Only compatible with UEFI systems i.e. PCs with Windows 8 or newer")
-var primaryFsFlag = flashFlagSet.String("primary-fs", "fat32",
+var primaryFsFlag = flashFlagSet.String("primary-fs", "exfat",
 	"Filesystem to use. If not using FAT32, UEFI:NTFS will be installed, and all\n"+
 		"ISO files will be stored on a single partition.\n"+
-		"Options: fat32, exfat, ntfs")
+		"Options: fat32, exfat, ntfs") // TODO: Support FAT32, NTFS
 var secondaryFsFlag = flashFlagSet.String("secondary-fs", "exfat",
 	"Filesystem to use for second partition if primary-fs=fat32 and ISO > 4GB\n"+
-		"Options: exfat, ntfs")
+		"Options: exfat, ntfs") // TODO: Make this work in combo with FAT32
 var disableValidationFlag = flashFlagSet.Bool("disable-validation", false,
 	"Disable validation of written files")
+
+//go:embed binaries/uefi-ntfs.img
+var UEFI_NTFS_IMG []byte
 
 func init() {
 	flag.Usage = func() {
@@ -77,6 +85,60 @@ func main() {
 		for _, f := range iso.ReadDir(nil) {
 			fmt.Printf("%s %-10d %-20s %v\n", f.Mode().String(), f.Size(), f.Name(), f.ModTime())
 		}
+
+		// Step 2: Check sources/install.wim if it exceeds 4 GB in size
+		/* largeInstallWim := false
+		for _, f := range iso.ReadDir(nil) {
+			if f.Name() == "sources/install.wim" && f.Size() > 4*1024*1024*1024 {
+				largeInstallWim = true
+			}
+		} */
+
+		// Step 3: Open the block device and create a new partition table
+		disk, err := diskfs.Open(args[1], diskfs.WithOpenMode(diskfs.ReadWrite))
+		if err != nil {
+			log.Fatalf("Failed to open block device: %v", err)
+		}
+		defer disk.Close()
+		var table partition.Table
+		// UEFI:NTFS partition
+		primaryPartitionStart := int64(1024*1024 /* 1 MiB */) / disk.LogicalBlocksize
+		primaryPartitionSize := int64(1024*1024 /* 1 MiB */) / disk.LogicalBlocksize
+		primaryPartitionEnd := primaryPartitionStart + primaryPartitionSize - 1
+		// Windows partition
+		secondaryPartitionStart := primaryPartitionEnd + 1
+		secondaryPartitionEnd := (disk.Size / disk.LogicalBlocksize) - 1
+		secondaryPartitionSize := secondaryPartitionEnd - secondaryPartitionStart + 1
+		if gptFlag != nil && *gptFlag {
+			// TODO: This doesn't apply reliably for some reason :/
+			secondaryPartitionEnd = secondaryPartitionEnd - 2048 // Reserve these at the end like fdisk
+			secondaryPartitionSize = secondaryPartitionEnd - secondaryPartitionStart + 1
+			table = &gpt.Table{
+				Partitions: []*gpt.Partition{
+					{Start: uint64(primaryPartitionStart), End: uint64(primaryPartitionEnd), Type: gpt.EFISystemPartition, Name: "EFI System"},
+					{Start: uint64(secondaryPartitionStart), End: uint64(secondaryPartitionEnd), Type: gpt.MicrosoftBasicData, Name: "Windows ISO"},
+				},
+			}
+		} else {
+			table = &mbr.Table{
+				Partitions: []*mbr.Partition{
+					{Start: uint32(primaryPartitionStart), Size: uint32(primaryPartitionSize), Type: mbr.EFISystem, Bootable: true},
+					{Start: uint32(secondaryPartitionStart), Size: uint32(secondaryPartitionSize), Type: mbr.NTFS, Bootable: false},
+				},
+			}
+		}
+		err = disk.Partition(table)
+		if err != nil {
+			log.Fatalf("Failed to create partition table: %v", err)
+		}
+
+		// Step 4: Write UEFI:NTFS to first partition
+		_, err = disk.WritePartitionContents(1, bytes.NewReader(UEFI_NTFS_IMG))
+		if err != nil {
+			log.Fatalf("Failed to write UEFI:NTFS to first partition: %v", err)
+		}
+
+		// Step 5: Mount second partition and write ISO contents to it
 
 		return
 	} else {
