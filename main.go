@@ -1,20 +1,14 @@
 package main
 
 import (
-	"bytes"
 	"flag"
 	"fmt"
 	"log"
 	"os"
-	"os/exec"
+	"slices"
+	"strings"
 
 	_ "embed"
-
-	"github.com/Xmister/udf"
-	"github.com/diskfs/go-diskfs"
-	"github.com/diskfs/go-diskfs/partition"
-	"github.com/diskfs/go-diskfs/partition/gpt"
-	"github.com/diskfs/go-diskfs/partition/mbr"
 )
 
 const version = "1.0.0-dev"
@@ -77,22 +71,17 @@ func main() {
 
 		// Look for prerequisites on system and change defaults accordingly
 		fsFlagStruct := flashFlagSet.Lookup("fs")
-		_, exfatErr := exec.LookPath("mkfs.exfat")
-		_, ntfsErr := exec.LookPath("mkfs.ntfs")
-		if ntfsErr == nil && exfatErr == nil {
-			fsFlagStruct.Usage = fsFlagStruct.Usage + "exfat, ntfs"
-			fsFlagStruct.DefValue = "exfat"
-			fsFlagStruct.Value.Set("exfat")
-		} else if ntfsErr != nil && exfatErr == nil {
-			fsFlagStruct.Usage = fsFlagStruct.Usage + "exfat"
-			fsFlagStruct.DefValue = "exfat"
-			fsFlagStruct.Value.Set("exfat")
-		} else if exfatErr != nil && ntfsErr == nil {
-			fsFlagStruct.Usage = fsFlagStruct.Usage + "ntfs"
-			fsFlagStruct.DefValue = "ntfs"
-			fsFlagStruct.Value.Set("ntfs")
-		} else {
-			// TODO: FAT32 fallback
+		supportedFilesystems := []string{}
+		if IsExFATAvailable() {
+			supportedFilesystems = append(supportedFilesystems, "exfat")
+		}
+		if IsNTFSAvailable() {
+			supportedFilesystems = append(supportedFilesystems, "ntfs")
+		}
+		if len(supportedFilesystems) > 0 {
+			fsFlagStruct.DefValue = supportedFilesystems[0]
+			fsFlagStruct.Value.Set(supportedFilesystems[0])
+			fsFlagStruct.Usage = fsFlagStruct.Usage + strings.Join(supportedFilesystems, ", ")
 		}
 
 		// Parse flags
@@ -107,9 +96,9 @@ func main() {
 			os.Exit(1)
 		} else if *fsFlag == "" {
 			log.Fatalln("Neither NTFS nor exFAT support were found on this system, exiting...")
-		} else if *fsFlag == "exfat" && exfatErr != nil {
+		} else if *fsFlag == "exfat" && !slices.Contains(supportedFilesystems, "exfat") {
 			log.Fatalln("exFAT specified, but support is missing on this system, exiting...")
-		} else if *fsFlag == "ntfs" && ntfsErr != nil {
+		} else if *fsFlag == "ntfs" && !slices.Contains(supportedFilesystems, "ntfs") {
 			log.Fatalln("NTFS specified, but support is missing on this system, exiting...")
 		}
 
@@ -119,10 +108,7 @@ func main() {
 			log.Fatalf("Failed to open ISO: %v", err)
 		}
 		defer file.Close()
-		if !IsValidWindowsISO(file) {
-			log.Fatalf("This file is not recognised as a valid Windows ISO image!")
-		}
-		iso, err := udf.NewUdfFromReader(file)
+		iso, err := OpenWindowsISO(file)
 		if err != nil {
 			log.Fatalf("Failed to read UDF filesystem on ISO: %v", err)
 		}
@@ -140,80 +126,43 @@ func main() {
 		} */
 
 		// Step 3: Open the block device and create a new partition table
+		// Step 4: Write UEFI:NTFS to first partition
 		destStat, err := os.Stat(args[1])
 		if err != nil {
 			log.Fatalf("Failed to get info about destination: %v", err)
 		}
-		disk, err := diskfs.Open(args[1], diskfs.WithOpenMode(diskfs.ReadWrite))
+		err = FormatDiskWithUEFINTFS(args[1], gptFlag != nil && *gptFlag)
 		if err != nil {
-			log.Fatalf("Failed to open destination: %v", err)
-		}
-		defer disk.Close()
-		var table partition.Table
-		// UEFI:NTFS partition
-		primaryPartitionStart := int64(1024*1024 /* 1 MiB */) / disk.LogicalBlocksize
-		primaryPartitionSize := int64(1024*1024 /* 1 MiB */) / disk.LogicalBlocksize
-		primaryPartitionEnd := primaryPartitionStart + primaryPartitionSize - 1
-		// exFAT/NTFS partition for Windows files
-		secondaryPartitionStart := primaryPartitionEnd + 1
-		secondaryPartitionEnd := (disk.Size / disk.LogicalBlocksize) - 1
-		secondaryPartitionSize := secondaryPartitionEnd - secondaryPartitionStart + 1
-		if gptFlag != nil && *gptFlag {
-			// TODO: This doesn't apply reliably for some reason :/
-			secondaryPartitionEnd = secondaryPartitionEnd - 2048 // Reserve these at the end like fdisk
-			secondaryPartitionSize = secondaryPartitionEnd - secondaryPartitionStart + 1
-			table = &gpt.Table{
-				Partitions: []*gpt.Partition{
-					{Start: uint64(primaryPartitionStart), End: uint64(primaryPartitionEnd), Type: gpt.EFISystemPartition, Name: "EFI System"},
-					{Start: uint64(secondaryPartitionStart), End: uint64(secondaryPartitionEnd), Type: gpt.MicrosoftBasicData, Name: "Windows ISO"},
-				},
-			}
-		} else {
-			table = &mbr.Table{
-				Partitions: []*mbr.Partition{
-					{Start: uint32(primaryPartitionStart), Size: uint32(primaryPartitionSize), Type: mbr.EFISystem, Bootable: true},
-					{Start: uint32(secondaryPartitionStart), Size: uint32(secondaryPartitionSize), Type: mbr.NTFS, Bootable: false},
-				},
-			}
-		}
-		err = disk.Partition(table)
-		if err != nil {
-			log.Fatalf("Failed to create partition table: %v", err)
+			log.Fatalf("Failed to format disk: %v", err)
 		}
 
-		// Step 4: Write UEFI:NTFS to first partition
-		_, err = disk.WritePartitionContents(1, bytes.NewReader(UEFI_NTFS_IMG))
-		if err != nil {
-			log.Fatalf("Failed to write UEFI:NTFS to first partition: %v", err)
-		}
-
-		// Step 5: Create exFAT/NTFS partition depending on fs flag
+		// Step 5a: Mount a regular file destination as a loopback device
+		// TODO: Guard this behind a flag?
 		blockDevice := args[1]
-		// Mount regular files as loopback devices (TODO: Guard this behind a flag?)
 		if destStat.Mode().IsRegular() {
-			loopDevice, err := exec.Command("losetup", "-f").CombinedOutput()
+			loopDevice, err := LoopMountFile(args[1])
 			if err != nil {
-				log.Fatalf("Failed to find free loop device: %v\nOutput: %s", err, loopDevice)
+				log.Fatalf("Failed to set up loop device: %v", err)
 			}
-			blockDevice = string(bytes.TrimSpace(loopDevice))
-			out, err := exec.Command("losetup", "-P", blockDevice, args[1]).CombinedOutput()
-			if err != nil {
-				log.Fatalf("Failed to set up loop device: %v\nOutput: %s", err, out)
-			}
+			blockDevice = loopDevice
 			defer func() {
-				if out, err := exec.Command("losetup", "-d", blockDevice).CombinedOutput(); err != nil {
-					log.Printf("Failed to detach loop device: %v\nOutput: %s", err, out)
+				if err := LoopUnmountFile(blockDevice); err != nil {
+					log.Printf("Failed to detach loop device: %v", err)
 				}
 			}()
 		}
-		blockDevicePartition := blockDevice
-		if blockDevice[len(blockDevice)-1] >= '0' && blockDevice[len(blockDevice)-1] <= '9' {
-			blockDevicePartition += "p2"
-		} else {
-			blockDevicePartition += "2"
-		}
-		if out, err := exec.Command("mkfs."+(*fsFlag), blockDevicePartition).CombinedOutput(); err != nil {
-			log.Fatalf("Failed to create filesystem: %v\nOutput: %s", err, out)
+
+		// Step 5b: Create exFAT/NTFS partition depending on fs flag
+		windowsPartition := GetBlockDevicePartition(blockDevice, 2)
+		switch *fsFlag {
+		case "exfat":
+			if err := MakeExFAT(windowsPartition); err != nil {
+				log.Fatalf("Failed to create exFAT filesystem: %v", err)
+			}
+		case "ntfs":
+			if err := MakeNTFS(windowsPartition); err != nil {
+				log.Fatalf("Failed to create NTFS filesystem: %v", err)
+			}
 		}
 
 		// Step 6: Mount exFAT/NTFS partition, defer unmount
@@ -222,12 +171,12 @@ func main() {
 			log.Fatalf("Failed to create mount point: %v", err)
 		}
 		defer os.Remove(mountPoint)
-		if out, err := exec.Command("mount", blockDevicePartition, mountPoint).CombinedOutput(); err != nil {
-			log.Fatalf("Failed to mount partition: %v\nOutput: %s", err, out)
+		if err := MountPartition(windowsPartition, mountPoint); err != nil {
+			log.Fatalf("Failed to mount partition: %v", err)
 		}
 		defer func() {
-			if out, err := exec.Command("umount", mountPoint).CombinedOutput(); err != nil {
-				log.Printf("Failed to unmount partition: %v\nOutput: %s", err, out)
+			if err := UnmountPartition(mountPoint); err != nil {
+				log.Printf("Failed to unmount partition: %v", err)
 			}
 		}()
 
