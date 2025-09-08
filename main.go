@@ -24,18 +24,25 @@ var versionFlag = flag.Bool("version", false, "Show version")
 
 var flashFlagSet = flag.NewFlagSet("flash", flag.ExitOnError)
 var gptFlag = flashFlagSet.Bool("gpt", false,
-	"Use GPT partitioning\n"+
+	"Use GPT partitioning instead of MBR.\n"+
 		"Note: Only compatible with UEFI systems i.e. PCs with Windows 8 or newer")
-var primaryFsFlag = flashFlagSet.String("primary-fs", "exfat",
-	"Filesystem to use. If not using FAT32, UEFI:NTFS will be installed, and all\n"+
-		"ISO files will be stored on a single partition.\n"+
-		"Available options: ")
+var fsFlag = flashFlagSet.String("fs", "",
+	"Filesystem to use for storing the USB flash drive contents.\n"+
+		"\nIf using exFAT or NTFS, UEFI:NTFS will be installed to the EFI system partition,\n"+
+		"and all ISO files will be placed on the exFAT/NTFS partition.\n"+
+		"\nIf using FAT32, all ISO files will be placed on the EFI system partition. If\n"+
+		"'sources/install.wim' is larger than 4 GB, the flash procedure will fail.\n"+
+		//"\nIf using FAT32, all ISO files will be placed on the EFI system partition, If\n"+
+		//"'sources/install.wim' is larger than 4 GB, a second exFAT/NTFS partition will be\n"+
+		//"created to store the WIM file on.\n"+
+		"\nAvailable options: ")
 
 /*
 	 TODO: Support FAT32 + secondary-fs
 		var secondaryFsFlag = flashFlagSet.String("secondary-fs", "exfat",
 			"Filesystem to use for second partition if primary-fs=fat32 and ISO > 4GB\n"+
 				"Options: exfat, ntfs")
+	 TODO: Support validation of written files
 		var disableValidationFlag = flashFlagSet.Bool("disable-validation", false,
 			"Disable validation of written files")
 */
@@ -68,26 +75,42 @@ func main() {
 		log.SetOutput(os.Stderr)
 		log.SetPrefix("[glassUSB] ")
 
-		// Look for prerequisites on system
-		primaryFsFlagStruct := flashFlagSet.Lookup("primary-fs")
+		// Look for prerequisites on system and change defaults accordingly
+		fsFlagStruct := flashFlagSet.Lookup("fs")
 		_, exfatErr := exec.LookPath("mkfs.exfat")
 		_, ntfsErr := exec.LookPath("mkfs.ntfs")
-		if ntfsErr != nil && exfatErr != nil {
-			log.Fatalln("Neither NTFS nor exFAT support were found on this system, exiting...")
-		} else if ntfsErr != nil {
-			primaryFsFlagStruct.Usage = primaryFsFlagStruct.Usage + "exfat"
-		} else if exfatErr != nil {
-			primaryFsFlagStruct.DefValue = "ntfs"
-			primaryFsFlagStruct.Value.Set("ntfs")
-			primaryFsFlagStruct.Usage = primaryFsFlagStruct.Usage + "ntfs"
+		if ntfsErr == nil && exfatErr == nil {
+			fsFlagStruct.Usage = fsFlagStruct.Usage + "exfat, ntfs"
+			fsFlagStruct.DefValue = "exfat"
+			fsFlagStruct.Value.Set("exfat")
+		} else if ntfsErr != nil && exfatErr == nil {
+			fsFlagStruct.Usage = fsFlagStruct.Usage + "exfat"
+			fsFlagStruct.DefValue = "exfat"
+			fsFlagStruct.Value.Set("exfat")
+		} else if exfatErr != nil && ntfsErr == nil {
+			fsFlagStruct.Usage = fsFlagStruct.Usage + "ntfs"
+			fsFlagStruct.DefValue = "ntfs"
+			fsFlagStruct.Value.Set("ntfs")
 		} else {
-			primaryFsFlagStruct.Usage = primaryFsFlagStruct.Usage + "exfat, ntfs"
+			// TODO: FAT32 fallback
 		}
+
+		// Parse flags
 		flashFlagSet.Parse(os.Args[2:])
 		args := flashFlagSet.Args()
 		if len(args) != 2 {
 			flashFlagSet.Usage()
 			os.Exit(1)
+		} else if fsFlag == nil || (*fsFlag != "exfat" && *fsFlag != "ntfs" && *fsFlag != "") {
+			log.Println("Invalid value provided for `-fs` flag!")
+			flashFlagSet.Usage()
+			os.Exit(1)
+		} else if *fsFlag == "" {
+			log.Fatalln("Neither NTFS nor exFAT support were found on this system, exiting...")
+		} else if *fsFlag == "exfat" && exfatErr != nil {
+			log.Fatalln("exFAT specified, but support is missing on this system, exiting...")
+		} else if *fsFlag == "ntfs" && ntfsErr != nil {
+			log.Fatalln("NTFS specified, but support is missing on this system, exiting...")
 		}
 
 		// Step 1: Read ISO
@@ -103,7 +126,7 @@ func main() {
 		if err != nil {
 			log.Fatalf("Failed to read UDF filesystem on ISO: %v", err)
 		}
-		// TODO: Remove this
+		// FIXME: Remove this
 		for _, f := range iso.ReadDir(nil) {
 			fmt.Printf("%s %-10d %-20s %v\n", f.Mode().String(), f.Size(), f.Name(), f.ModTime())
 		}
@@ -131,7 +154,7 @@ func main() {
 		primaryPartitionStart := int64(1024*1024 /* 1 MiB */) / disk.LogicalBlocksize
 		primaryPartitionSize := int64(1024*1024 /* 1 MiB */) / disk.LogicalBlocksize
 		primaryPartitionEnd := primaryPartitionStart + primaryPartitionSize - 1
-		// Windows partition
+		// exFAT/NTFS partition for Windows files
 		secondaryPartitionStart := primaryPartitionEnd + 1
 		secondaryPartitionEnd := (disk.Size / disk.LogicalBlocksize) - 1
 		secondaryPartitionSize := secondaryPartitionEnd - secondaryPartitionStart + 1
@@ -164,13 +187,17 @@ func main() {
 			log.Fatalf("Failed to write UEFI:NTFS to first partition: %v", err)
 		}
 
-		// Step 5: Mount second partition and create exFAT/NTFS partition depending on primaryFs
+		// Step 5: Create exFAT/NTFS partition depending on fs flag
 		//blockDevice := args[1]
 		if destStat.Mode().Perm()&os.ModeDevice != 0 {
-			// TODO: Support flashing to a loopback device
+			// FIXME: Support flashing to a loopback device
 		} else {
-			// TODO: Support flashing to a real device
+			// FIXME: Support flashing to a real device
 		}
+
+		// FIXME: Step 6: Mount exFAT/NTFS partition, unpack Windows ISO contents, and unmount
+
+		// FIXME: Step 7: Write MBR to device for exFAT/NTFS boot using `ms-sys`
 
 		return
 	} else {
