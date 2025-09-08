@@ -188,16 +188,52 @@ func main() {
 		}
 
 		// Step 5: Create exFAT/NTFS partition depending on fs flag
-		//blockDevice := args[1]
-		if destStat.Mode().Perm()&os.ModeDevice != 0 {
-			// FIXME: Support flashing to a loopback device
+		blockDevice := args[1]
+		// Mount regular files as loopback devices (TODO: Guard this behind a flag?)
+		if destStat.Mode().IsRegular() {
+			loopDevice, err := exec.Command("losetup", "-f").CombinedOutput()
+			if err != nil {
+				log.Fatalf("Failed to find free loop device: %v\nOutput: %s", err, loopDevice)
+			}
+			blockDevice = string(bytes.TrimSpace(loopDevice))
+			out, err := exec.Command("losetup", "-P", blockDevice, args[1]).CombinedOutput()
+			if err != nil {
+				log.Fatalf("Failed to set up loop device: %v\nOutput: %s", err, out)
+			}
+			defer func() {
+				if out, err := exec.Command("losetup", "-d", blockDevice).CombinedOutput(); err != nil {
+					log.Printf("Failed to detach loop device: %v\nOutput: %s", err, out)
+				}
+			}()
+		}
+		blockDevicePartition := blockDevice
+		if blockDevice[len(blockDevice)-1] >= '0' && blockDevice[len(blockDevice)-1] <= '9' {
+			blockDevicePartition += "p2"
 		} else {
-			// FIXME: Support flashing to a real device
+			blockDevicePartition += "2"
+		}
+		if out, err := exec.Command("mkfs."+(*fsFlag), blockDevicePartition).CombinedOutput(); err != nil {
+			log.Fatalf("Failed to create filesystem: %v\nOutput: %s", err, out)
 		}
 
-		// FIXME: Step 6: Mount exFAT/NTFS partition, unpack Windows ISO contents, and unmount
+		// Step 6: Mount exFAT/NTFS partition, defer unmount
+		mountPoint, err := os.MkdirTemp(os.TempDir(), "glassusb-")
+		if err != nil {
+			log.Fatalf("Failed to create mount point: %v", err)
+		}
+		defer os.Remove(mountPoint)
+		if out, err := exec.Command("mount", blockDevicePartition, mountPoint).CombinedOutput(); err != nil {
+			log.Fatalf("Failed to mount partition: %v\nOutput: %s", err, out)
+		}
+		defer func() {
+			if out, err := exec.Command("umount", mountPoint).CombinedOutput(); err != nil {
+				log.Printf("Failed to unmount partition: %v\nOutput: %s", err, out)
+			}
+		}()
 
-		// FIXME: Step 7: Write MBR to device for exFAT/NTFS boot using `ms-sys`
+		// FIXME: Step 7: Unpack Windows ISO contents to exFAT/NTFS partition
+
+		// FIXME: Step 8: Write MBR to device for exFAT/NTFS boot using `ms-sys`
 
 		return
 	} else {
