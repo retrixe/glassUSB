@@ -2,7 +2,6 @@ package main
 
 import (
 	"flag"
-	"fmt"
 	"log"
 	"os"
 	"slices"
@@ -112,10 +111,6 @@ func main() {
 		if err != nil {
 			log.Fatalf("Failed to read UDF filesystem on ISO: %v", err)
 		}
-		// FIXME: Remove this
-		for _, f := range iso.ReadDir(nil) {
-			fmt.Printf("%s %-10d %-20s %v\n", f.Mode().String(), f.Size(), f.Name(), f.ModTime())
-		}
 
 		// Step 2: Check sources/install.wim if it exceeds 4 GB in size
 		/* largeInstallWim := false
@@ -180,7 +175,10 @@ func main() {
 			}
 		}()
 
-		// FIXME: Step 7: Unpack Windows ISO contents to exFAT/NTFS partition
+		// Step 7: Unpack Windows ISO contents to exFAT/NTFS partition
+		if err := ExtractISOToLocation(iso, mountPoint); err != nil {
+			log.Fatalf("Failed to extract ISO contents: %v", err)
+		}
 
 		// FIXME: Step 8: Write MBR to device for exFAT/NTFS boot using `ms-sys`
 
