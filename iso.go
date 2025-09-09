@@ -77,6 +77,10 @@ func extractISOFileToLocation(file udf.File, location string) error {
 		if err != nil {
 			return fmt.Errorf("failed to copy file %s: %w", file.Name(), err)
 		}
+		err = newFile.Sync()
+		if err != nil {
+			return fmt.Errorf("failed to sync file %s: %w", file.Name(), err)
+		}
 	}
 	return nil
 }
