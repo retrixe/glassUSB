@@ -17,12 +17,13 @@ var versionFlag = flag.Bool("version", false, "Show version")
 
 var flashFlagSet = flag.NewFlagSet("flash", flag.ExitOnError)
 var gptFlag = flashFlagSet.Bool("gpt", false,
-	"Use GPT partitioning instead of MBR.\n"+
+	"EXPERIMENTAL: Use GPT partitioning instead of MBR.\n"+
 		"Note: Only compatible with UEFI systems i.e. PCs with Windows 8 or newer")
 var fsFlag = flashFlagSet.String("fs", "",
 	"Filesystem to use for storing the USB flash drive contents.\n"+
 		"\nIf using exFAT or NTFS, UEFI:NTFS will be installed to the EFI system partition,\n"+
 		"and all ISO files will be placed on the exFAT/NTFS partition.\n"+
+		"Note: Drives formatted with exFAT will not boot on PCs with Secure Boot enabled.\n"+
 		"\nIf using FAT32, all ISO files will be placed on the EFI system partition. If\n"+
 		"'sources/install.wim' is larger than 4 GB, the flash procedure will fail.\n"+
 		//"\nIf using FAT32, all ISO files will be placed on the EFI system partition, If\n"+
@@ -130,7 +131,7 @@ func main() {
 		} */
 
 		// Step 3: Open the block device and create a new partition table
-		// Step 4: Write UEFI:NTFS to first partition
+		// Step 4: Write UEFI:NTFS to second partition
 		destStat, err := os.Stat(args[1])
 		if err != nil {
 			log.Fatalf("Failed to get info about destination: %v", err)
