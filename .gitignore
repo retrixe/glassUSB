@@ -7,7 +7,9 @@
 *.dll
 *.so
 *.dylib
+
 /glassusb
+/binaries/ms-sys
 
 # Test binary, built with `go test -c`
 *.test
