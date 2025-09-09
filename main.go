@@ -71,11 +71,15 @@ func main() {
 		// Look for prerequisites on system and change defaults accordingly
 		fsFlagStruct := flashFlagSet.Lookup("fs")
 		supportedFilesystems := []string{}
-		if IsExFATAvailable() {
-			supportedFilesystems = append(supportedFilesystems, "exfat")
-		}
 		if IsNTFSAvailable() {
 			supportedFilesystems = append(supportedFilesystems, "ntfs")
+		} else {
+			// FIXME: Remove once FAT32 support is added, replace with supportedFilesystems += "fat32" after NTFS
+			log.Println("Warning: NTFS support not found on this system, falling back to exFAT.")
+			log.Println("Warning: exFAT partitions will not boot on PCs with Secure Boot on.")
+		}
+		if IsExFATAvailable() {
+			supportedFilesystems = append(supportedFilesystems, "exfat")
 		}
 		if len(supportedFilesystems) > 0 {
 			fsFlagStruct.DefValue = supportedFilesystems[0]
@@ -99,6 +103,11 @@ func main() {
 			log.Fatalln("exFAT specified, but support is missing on this system, exiting...")
 		} else if *fsFlag == "ntfs" && !slices.Contains(supportedFilesystems, "ntfs") {
 			log.Fatalln("NTFS specified, but support is missing on this system, exiting...")
+		}
+
+		// Warn exFAT does not work with Secure Boot enabled.
+		if *fsFlag == "exfat" {
+			log.Println("Warning: Drives formatted with exFAT (--fs=exfat) will not boot on PCs with Secure Boot enabled.")
 		}
 
 		// Step 1: Read ISO
