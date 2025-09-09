@@ -148,7 +148,7 @@ func main() {
 		}
 
 		// Step 5b: Create exFAT/NTFS partition depending on fs flag
-		windowsPartition := GetBlockDevicePartition(blockDevice, 2)
+		windowsPartition := GetBlockDevicePartition(blockDevice, 1)
 		switch *fsFlag {
 		case "exfat":
 			if err := MakeExFAT(windowsPartition); err != nil {
