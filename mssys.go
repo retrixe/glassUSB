@@ -2,7 +2,9 @@ package main
 
 import (
 	_ "embed"
+	"fmt"
 	"os"
+	"os/exec"
 )
 
 //go:generate sh build-ms-sys.sh
@@ -28,6 +30,13 @@ func GetMsSysAsProgram() (*os.File, error) {
 	return f, nil
 }
 
-func WriteMBR(location string) {
-	// FIXME
+func WriteMBRToPartition(partition string) error {
+	msSys, err := GetMsSysAsProgram()
+	if err != nil {
+		return err
+	}
+	if out, err := exec.Command(msSys.Name(), "-w", partition).CombinedOutput(); err != nil {
+		return fmt.Errorf("failed to write MBR bootloader to %s: %w\noutput: %s", partition, err, out)
+	}
+	return nil
 }

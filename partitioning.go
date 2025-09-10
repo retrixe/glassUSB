@@ -1,10 +1,9 @@
 package main
 
 import (
-	"bytes"
 	"fmt"
 
-	"github.com/diskfs/go-diskfs"
+	"github.com/diskfs/go-diskfs/disk"
 	"github.com/diskfs/go-diskfs/partition"
 	"github.com/diskfs/go-diskfs/partition/gpt"
 	"github.com/diskfs/go-diskfs/partition/mbr"
@@ -13,13 +12,7 @@ import (
 // FormatDiskWithUEFINTFS formats a disk with 2 partitions:
 // - A 1 MiB FAT32 ESP partition holding UEFI:NTFS
 // - The remaining disk is spanned by an mbr.NTFS / gpt.MicrosoftBasicData partition
-func FormatDiskWithUEFINTFS(name string, useGpt bool) error {
-	disk, err := diskfs.Open(name, diskfs.WithOpenMode(diskfs.ReadWrite))
-	if err != nil {
-		return fmt.Errorf("failed to open destination: %w", err)
-	}
-	defer disk.Close()
-
+func FormatDiskForUEFINTFS(disk *disk.Disk, useGpt bool) error {
 	// exFAT/NTFS partition for Windows files
 	primaryPartitionStart := int64(1024*1024 /* 1 MiB */) / disk.LogicalBlocksize
 	primaryPartitionSize := (disk.Size / disk.LogicalBlocksize) - (primaryPartitionStart * 2)
@@ -46,21 +39,14 @@ func FormatDiskWithUEFINTFS(name string, useGpt bool) error {
 	} else {
 		table = &mbr.Table{
 			Partitions: []*mbr.Partition{
-				{Start: uint32(primaryPartitionStart), Size: uint32(primaryPartitionSize), Type: mbr.NTFS, Bootable: false},
-				{Start: uint32(secondaryPartitionStart), Size: uint32(secondaryPartitionSize), Type: mbr.EFISystem, Bootable: true},
+				{Start: uint32(primaryPartitionStart), Size: uint32(primaryPartitionSize), Type: mbr.NTFS, Bootable: true},
+				{Start: uint32(secondaryPartitionStart), Size: uint32(secondaryPartitionSize), Type: mbr.EFISystem, Bootable: false},
 			},
 		}
 	}
 
-	err = disk.Partition(table)
-	if err != nil {
+	if err := disk.Partition(table); err != nil {
 		return fmt.Errorf("failed to create partition table: %w", err)
-	}
-
-	// Write UEFI:NTFS image to second partition
-	_, err = disk.WritePartitionContents(2, bytes.NewReader(UEFI_NTFS_IMG))
-	if err != nil {
-		return fmt.Errorf("failed to write UEFI:NTFS to second partition: %w", err)
 	}
 	return nil
 }

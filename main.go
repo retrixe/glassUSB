@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"flag"
 	"log"
 	"os"
@@ -8,6 +9,8 @@ import (
 	"strings"
 
 	_ "embed"
+
+	"github.com/diskfs/go-diskfs"
 )
 
 const version = "1.0.0-dev"
@@ -112,7 +115,7 @@ func main() {
 		}
 
 		// Step 1: Read ISO
-		log.Println("Phase 1/5: Reading ISO")
+		log.Println("Phase 1/6: Reading ISO")
 		file, err := os.Open(args[0])
 		if err != nil {
 			log.Fatalf("Failed to open ISO: %v", err)
@@ -130,16 +133,30 @@ func main() {
 		} */
 
 		// Step 2: Open the block device and create a new partition table
-		// Step 3: Write UEFI:NTFS to second partition
-		log.Println("Phase 2/5: Partitioning destination drive")
+		log.Println("Phase 2/6: Partitioning destination drive")
 		destStat, err := os.Stat(args[1])
 		if err != nil {
 			log.Fatalf("Failed to get info about destination: %v", err)
 		}
-		err = FormatDiskWithUEFINTFS(args[1], gptFlag != nil && *gptFlag)
-		if err != nil {
-			log.Fatalf("Failed to format disk: %v", err)
-		}
+		func() {
+			disk, err := diskfs.Open(args[1], diskfs.WithOpenMode(diskfs.ReadWrite))
+			if err != nil {
+				log.Fatalf("Failed to open destination: %v", err)
+			}
+			defer disk.Close()
+
+			err = FormatDiskForUEFINTFS(disk, gptFlag != nil && *gptFlag)
+			if err != nil {
+				log.Fatalf("Failed to format disk: %v", err)
+			}
+
+			// Step 3: Write UEFI:NTFS to second partition
+			log.Println("Phase 3/6: Writing UEFI:NTFS bootloader")
+			_, err = disk.WritePartitionContents(2, bytes.NewReader(UEFI_NTFS_IMG))
+			if err != nil {
+				log.Fatalf("Failed to write UEFI bootloader to second partition: %v", err)
+			}
+		}()
 
 		// Step 4a: Mount a regular file destination as a loopback device
 		// TODO: Guard this behind a flag?
@@ -171,29 +188,34 @@ func main() {
 		}
 
 		// Step 5: Mount exFAT/NTFS partition, defer unmount
-		log.Println("Phase 3/5: Mounting sources partition")
-		mountPoint, err := os.MkdirTemp(os.TempDir(), "glassusb-")
-		if err != nil {
-			log.Fatalf("Failed to create mount point: %v", err)
-		}
-		defer os.Remove(mountPoint)
-		if err := MountPartition(windowsPartition, mountPoint); err != nil {
-			log.Fatalf("Failed to mount partition: %v", err)
-		}
-		defer func() {
-			if err := UnmountPartition(mountPoint); err != nil {
-				log.Printf("Failed to unmount partition: %v", err)
+		log.Println("Phase 4/6: Mounting sources partition")
+		func() {
+			mountPoint, err := os.MkdirTemp(os.TempDir(), "glassusb-")
+			if err != nil {
+				log.Fatalf("Failed to create mount point: %v", err)
+			}
+			defer os.Remove(mountPoint)
+			if err := MountPartition(windowsPartition, mountPoint); err != nil {
+				log.Fatalf("Failed to mount partition: %v", err)
+			}
+			defer func() {
+				if err := UnmountPartition(mountPoint); err != nil {
+					log.Printf("Failed to unmount partition: %v", err)
+				}
+			}()
+
+			// Step 6: Unpack Windows ISO contents to exFAT/NTFS partition
+			log.Println("Phase 5/6: Extracting ISO to sources partition")
+			if err := ExtractISOToLocation(iso, mountPoint); err != nil {
+				log.Fatalf("Failed to extract ISO contents: %v", err)
 			}
 		}()
 
-		// Step 6: Unpack Windows ISO contents to exFAT/NTFS partition
-		log.Println("Phase 4/5: Extracting ISO to sources partition")
-		if err := ExtractISOToLocation(iso, mountPoint); err != nil {
-			log.Fatalf("Failed to extract ISO contents: %v", err)
+		// Step 7: Write MBR to device for exFAT/NTFS boot using `ms-sys`
+		log.Println("Phase 6/6: Writing MBR bootloader")
+		if err := WriteMBRToPartition(windowsPartition); err != nil {
+			log.Fatalf("Failed to write MBR bootloader: %v", err)
 		}
-
-		// FIXME: Step 7: Write MBR to device for exFAT/NTFS boot using `ms-sys`
-		log.Println("Phase 5/5: Writing MBR bootloader")
 
 		return
 	} else {
