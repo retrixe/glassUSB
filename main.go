@@ -112,6 +112,7 @@ func main() {
 		}
 
 		// Step 1: Read ISO
+		log.Println("Phase 1/5: Reading ISO")
 		file, err := os.Open(args[0])
 		if err != nil {
 			log.Fatalf("Failed to open ISO: %v", err)
@@ -121,17 +122,16 @@ func main() {
 		if err != nil {
 			log.Fatalf("Failed to read UDF filesystem on ISO: %v", err)
 		}
-
-		// Step 2: Check sources/install.wim if it exceeds 4 GB in size
-		/* largeInstallWim := false
+		/* largeFiles := false
 		for _, f := range iso.ReadDir(nil) {
 			if f.Name() == "sources/install.wim" && f.Size() > 4*1024*1024*1024 {
-				largeInstallWim = true
+				largeFiles = true
 			}
 		} */
 
-		// Step 3: Open the block device and create a new partition table
-		// Step 4: Write UEFI:NTFS to second partition
+		// Step 2: Open the block device and create a new partition table
+		// Step 3: Write UEFI:NTFS to second partition
+		log.Println("Phase 2/5: Partitioning destination drive")
 		destStat, err := os.Stat(args[1])
 		if err != nil {
 			log.Fatalf("Failed to get info about destination: %v", err)
@@ -141,7 +141,7 @@ func main() {
 			log.Fatalf("Failed to format disk: %v", err)
 		}
 
-		// Step 5a: Mount a regular file destination as a loopback device
+		// Step 4a: Mount a regular file destination as a loopback device
 		// TODO: Guard this behind a flag?
 		blockDevice := args[1]
 		if destStat.Mode().IsRegular() {
@@ -157,7 +157,7 @@ func main() {
 			}()
 		}
 
-		// Step 5b: Create exFAT/NTFS partition depending on fs flag
+		// Step 4b: Create exFAT/NTFS partition depending on fs flag
 		windowsPartition := GetBlockDevicePartition(blockDevice, 1)
 		switch *fsFlag {
 		case "exfat":
@@ -170,7 +170,8 @@ func main() {
 			}
 		}
 
-		// Step 6: Mount exFAT/NTFS partition, defer unmount
+		// Step 5: Mount exFAT/NTFS partition, defer unmount
+		log.Println("Phase 3/5: Mounting sources partition")
 		mountPoint, err := os.MkdirTemp(os.TempDir(), "glassusb-")
 		if err != nil {
 			log.Fatalf("Failed to create mount point: %v", err)
@@ -185,12 +186,14 @@ func main() {
 			}
 		}()
 
-		// Step 7: Unpack Windows ISO contents to exFAT/NTFS partition
+		// Step 6: Unpack Windows ISO contents to exFAT/NTFS partition
+		log.Println("Phase 4/5: Extracting ISO to sources partition")
 		if err := ExtractISOToLocation(iso, mountPoint); err != nil {
 			log.Fatalf("Failed to extract ISO contents: %v", err)
 		}
 
-		// FIXME: Step 8: Write MBR to device for exFAT/NTFS boot using `ms-sys`
+		// FIXME: Step 7: Write MBR to device for exFAT/NTFS boot using `ms-sys`
+		log.Println("Phase 5/5: Writing MBR bootloader")
 
 		return
 	} else {
