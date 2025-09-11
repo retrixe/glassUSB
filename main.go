@@ -216,6 +216,9 @@ func main() {
 		if err := WriteMBRToPartition(windowsPartition); err != nil {
 			log.Fatalf("Failed to write MBR bootloader: %v", err)
 		}
+		if err := WriteMBRToPartition(blockDevice); err != nil {
+			log.Fatalf("Failed to write MBR bootloader: %v", err)
+		}
 
 		return
 	} else {
