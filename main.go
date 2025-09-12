@@ -111,8 +111,13 @@ func main() {
 			log.Println("Warning: Drives formatted with exFAT (--fs=exfat) will not boot on PCs with Secure Boot enabled.")
 		}
 
+		totalPhases := "7"
+		if *gptFlag {
+			totalPhases = "6" // Skip MBR writing phase
+		}
+
 		// Step 1: Read ISO
-		log.Println("Phase 1/6: Reading ISO")
+		log.Println("Phase 1/" + totalPhases + ": Reading ISO")
 		file, err := os.Open(args[0])
 		if err != nil {
 			log.Fatalf("Failed to open ISO: %v", err)
@@ -130,7 +135,7 @@ func main() {
 		} */
 
 		// Step 2: Open the block device and create a new partition table
-		log.Println("Phase 2/6: Partitioning destination drive")
+		log.Println("Phase 2/" + totalPhases + ": Partitioning destination drive")
 		destStat, err := os.Stat(args[1])
 		if err != nil {
 			log.Fatalf("Failed to get info about destination: %v", err)
@@ -144,13 +149,14 @@ func main() {
 		uefiNtfsPartition := GetBlockDevicePartition(blockDevice, 2)
 
 		// Step 3: Write UEFI:NTFS to second partition
-		log.Println("Phase 3/6: Writing UEFI:NTFS bootloader")
+		log.Println("Phase 3/" + totalPhases + ": Writing UEFI:NTFS bootloader")
 		err = WriteUEFINTFSToPartition(uefiNtfsPartition)
 		if err != nil {
 			log.Fatalf("Failed to write UEFI bootloader to second partition: %v", err)
 		}
 
 		// Step 4a: Mount a regular file destination as a loopback device
+		log.Println("Phase 4/" + totalPhases + ": Creating sources partition")
 		// TODO: Guard this behind a flag?
 		if destStat.Mode().IsRegular() {
 			loopDevice, err := LoopMountFile(args[1])
@@ -178,7 +184,7 @@ func main() {
 		}
 
 		// Step 5: Mount NTFS/exFAT partition, defer unmount
-		log.Println("Phase 4/6: Mounting sources partition")
+		log.Println("Phase 5/" + totalPhases + ": Mounting sources partition")
 		func() {
 			mountPoint, err := os.MkdirTemp(os.TempDir(), "glassusb-")
 			if err != nil {
@@ -195,19 +201,21 @@ func main() {
 			}()
 
 			// Step 6: Unpack Windows ISO contents to NTFS/exFAT partition
-			log.Println("Phase 5/6: Extracting ISO to sources partition")
+			log.Println("Phase 6/" + totalPhases + ": Extracting ISO to sources partition")
 			if err := ExtractISOToLocation(iso, mountPoint); err != nil {
 				log.Fatalf("Failed to extract ISO contents: %v", err)
 			}
 		}()
 
 		// Step 7: Write MBR to device for NTFS/exFAT boot using `ms-sys`
-		log.Println("Phase 6/6: Writing MBR bootloader")
-		if err := WriteMBRToPartition(windowsPartition); err != nil {
-			log.Fatalf("Failed to write MBR bootloader: %v", err)
-		}
-		if err := WriteMBRToPartition(blockDevice); err != nil {
-			log.Fatalf("Failed to write MBR bootloader: %v", err)
+		if gptFlag == nil || !*gptFlag {
+			log.Println("Phase 7/" + totalPhases + ": Writing MBR bootloader")
+			if err := WriteMBRToPartition(windowsPartition); err != nil {
+				log.Fatalf("Failed to write MBR bootloader: %v", err)
+			}
+			if err := WriteMBRToPartition(blockDevice); err != nil {
+				log.Fatalf("Failed to write MBR bootloader: %v", err)
+			}
 		}
 
 		return
