@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"flag"
 	"log"
 	"os"
@@ -9,8 +8,6 @@ import (
 	"strings"
 
 	_ "embed"
-
-	"github.com/diskfs/go-diskfs"
 )
 
 const version = "1.0.0-dev"
@@ -138,25 +135,20 @@ func main() {
 		if err != nil {
 			log.Fatalf("Failed to get info about destination: %v", err)
 		}
-		func() {
-			disk, err := diskfs.Open(args[1], diskfs.WithOpenMode(diskfs.ReadWrite))
-			if err != nil {
-				log.Fatalf("Failed to open destination: %v", err)
-			}
-			defer disk.Close()
+		err = FormatDiskForUEFINTFS(args[1], gptFlag != nil && *gptFlag)
+		if err != nil {
+			log.Fatalf("Failed to format disk: %v", err)
+		}
+		blockDevice := args[1]
+		windowsPartition := GetBlockDevicePartition(blockDevice, 1)
+		uefiNtfsPartition := GetBlockDevicePartition(blockDevice, 2)
 
-			err = FormatDiskForUEFINTFS(disk, gptFlag != nil && *gptFlag)
-			if err != nil {
-				log.Fatalf("Failed to format disk: %v", err)
-			}
-
-			// Step 3: Write UEFI:NTFS to second partition
-			log.Println("Phase 3/6: Writing UEFI:NTFS bootloader")
-			_, err = disk.WritePartitionContents(2, bytes.NewReader(UEFI_NTFS_IMG))
-			if err != nil {
-				log.Fatalf("Failed to write UEFI bootloader to second partition: %v", err)
-			}
-		}()
+		// Step 3: Write UEFI:NTFS to second partition
+		log.Println("Phase 3/6: Writing UEFI:NTFS bootloader")
+		err = WriteUEFINTFSToPartition(uefiNtfsPartition)
+		if err != nil {
+			log.Fatalf("Failed to write UEFI bootloader to second partition: %v", err)
+		}
 
 		// Step 4a: Mount a regular file destination as a loopback device
 		// TODO: Guard this behind a flag?

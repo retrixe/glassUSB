@@ -2,8 +2,10 @@ package main
 
 import (
 	"fmt"
+	"log"
+	"os"
 
-	"github.com/diskfs/go-diskfs/disk"
+	"github.com/diskfs/go-diskfs"
 	"github.com/diskfs/go-diskfs/partition"
 	"github.com/diskfs/go-diskfs/partition/gpt"
 	"github.com/diskfs/go-diskfs/partition/mbr"
@@ -12,7 +14,13 @@ import (
 // FormatDiskWithUEFINTFS formats a disk with 2 partitions:
 // - A 1 MiB FAT32 ESP partition holding UEFI:NTFS
 // - The remaining disk is spanned by an mbr.NTFS / gpt.MicrosoftBasicData partition
-func FormatDiskForUEFINTFS(disk *disk.Disk, useGpt bool) error {
+func FormatDiskForUEFINTFS(name string, useGpt bool) error {
+	disk, err := diskfs.Open(name, diskfs.WithOpenMode(diskfs.ReadWrite))
+	if err != nil {
+		log.Fatalf("Failed to open destination: %v", err)
+	}
+	defer disk.Close()
+
 	// Windows partition
 	primaryPartitionStart := int64(1024*1024 /* 1 MiB */) / disk.LogicalBlocksize
 	primaryPartitionSize := (disk.Size / disk.LogicalBlocksize) - (primaryPartitionStart * 2)
@@ -47,6 +55,21 @@ func FormatDiskForUEFINTFS(disk *disk.Disk, useGpt bool) error {
 
 	if err := disk.Partition(table); err != nil {
 		return fmt.Errorf("failed to create partition table: %w", err)
+	}
+	return nil
+}
+
+func WriteUEFINTFSToPartition(partition string) error {
+	file, err := os.OpenFile(partition, os.O_WRONLY|os.O_TRUNC, os.ModePerm)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+	n, err := file.Write(UEFI_NTFS_IMG)
+	if err != nil {
+		return err
+	} else if n != len(UEFI_NTFS_IMG) {
+		return fmt.Errorf("short write: wrote %d of %d bytes", n, len(UEFI_NTFS_IMG))
 	}
 	return nil
 }
