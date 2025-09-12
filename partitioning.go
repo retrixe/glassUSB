@@ -13,7 +13,7 @@ import (
 // - A 1 MiB FAT32 ESP partition holding UEFI:NTFS
 // - The remaining disk is spanned by an mbr.NTFS / gpt.MicrosoftBasicData partition
 func FormatDiskForUEFINTFS(disk *disk.Disk, useGpt bool) error {
-	// exFAT/NTFS partition for Windows files
+	// Windows partition
 	primaryPartitionStart := int64(1024*1024 /* 1 MiB */) / disk.LogicalBlocksize
 	primaryPartitionSize := (disk.Size / disk.LogicalBlocksize) - (primaryPartitionStart * 2)
 	primaryPartitionEnd := primaryPartitionStart + primaryPartitionSize - 1

@@ -24,13 +24,13 @@ var gptFlag = flashFlagSet.Bool("gpt", false,
 		"Note: Only compatible with UEFI systems i.e. PCs with Windows 8 or newer")
 var fsFlag = flashFlagSet.String("fs", "",
 	"Filesystem to use for storing the USB flash drive contents.\n"+
-		"\nIf using exFAT or NTFS, UEFI:NTFS will be installed to the EFI system partition,\n"+
-		"and all ISO files will be placed on the exFAT/NTFS partition.\n"+
+		"\nIf using NTFS or exFAT, UEFI:NTFS will be installed to the EFI system partition,\n"+
+		"and all ISO files will be placed on the NTFS/exFAT partition.\n"+
 		"Note: Drives formatted with exFAT will not boot on PCs with Secure Boot enabled.\n"+
 		"\nIf using FAT32, all ISO files will be placed on the EFI system partition. If\n"+
 		"'sources/install.wim' is larger than 4 GB, the flash procedure will fail.\n"+
 		//"\nIf using FAT32, all ISO files will be placed on the EFI system partition, If\n"+
-		//"'sources/install.wim' is larger than 4 GB, a second exFAT/NTFS partition will be\n"+
+		//"'sources/install.wim' is larger than 4 GB, a second NTFS/exFAT partition will be\n"+
 		//"created to store the WIM file on.\n"+
 		"\nAvailable options: ")
 
@@ -160,7 +160,6 @@ func main() {
 
 		// Step 4a: Mount a regular file destination as a loopback device
 		// TODO: Guard this behind a flag?
-		blockDevice := args[1]
 		if destStat.Mode().IsRegular() {
 			loopDevice, err := LoopMountFile(args[1])
 			if err != nil {
@@ -174,8 +173,7 @@ func main() {
 			}()
 		}
 
-		// Step 4b: Create exFAT/NTFS partition depending on fs flag
-		windowsPartition := GetBlockDevicePartition(blockDevice, 1)
+		// Step 4b: Create NTFS/exFAT partition depending on fs flag
 		switch *fsFlag {
 		case "exfat":
 			if err := MakeExFAT(windowsPartition); err != nil {
@@ -187,7 +185,7 @@ func main() {
 			}
 		}
 
-		// Step 5: Mount exFAT/NTFS partition, defer unmount
+		// Step 5: Mount NTFS/exFAT partition, defer unmount
 		log.Println("Phase 4/6: Mounting sources partition")
 		func() {
 			mountPoint, err := os.MkdirTemp(os.TempDir(), "glassusb-")
@@ -204,14 +202,14 @@ func main() {
 				}
 			}()
 
-			// Step 6: Unpack Windows ISO contents to exFAT/NTFS partition
+			// Step 6: Unpack Windows ISO contents to NTFS/exFAT partition
 			log.Println("Phase 5/6: Extracting ISO to sources partition")
 			if err := ExtractISOToLocation(iso, mountPoint); err != nil {
 				log.Fatalf("Failed to extract ISO contents: %v", err)
 			}
 		}()
 
-		// Step 7: Write MBR to device for exFAT/NTFS boot using `ms-sys`
+		// Step 7: Write MBR to device for NTFS/exFAT boot using `ms-sys`
 		log.Println("Phase 6/6: Writing MBR bootloader")
 		if err := WriteMBRToPartition(windowsPartition); err != nil {
 			log.Fatalf("Failed to write MBR bootloader: %v", err)
