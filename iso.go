@@ -73,7 +73,8 @@ func extractISOFileToLocation(file udf.File, location string) error {
 			return fmt.Errorf("failed to create file %s: %w", file.Name(), err)
 		}
 		defer newFile.Close()
-		_, err = io.Copy(newFile, file.NewReader())
+		buf := make([]byte, 4*1024*1024)
+		_, err = io.CopyBuffer(newFile, file.NewReader(), buf)
 		if err != nil {
 			return fmt.Errorf("failed to copy file %s: %w", file.Name(), err)
 		}
