@@ -74,18 +74,24 @@ func main() {
 		supportedFilesystems := []string{}
 		if IsNTFSAvailable() {
 			supportedFilesystems = append(supportedFilesystems, "ntfs")
-		} else {
-			// FIXME: Remove once FAT32 support is added, replace with supportedFilesystems += "fat32" after NTFS
-			log.Println("Warning: NTFS support not found on this system, falling back to exFAT.")
-			log.Println("Warning: exFAT partitions will not boot on PCs with Secure Boot on.")
 		}
 		if IsExFATAvailable() {
 			supportedFilesystems = append(supportedFilesystems, "exfat")
+		}
+		if IsFAT32Available() {
+			supportedFilesystems = append(supportedFilesystems, "fat32")
 		}
 		if len(supportedFilesystems) > 0 {
 			fsFlagStruct.DefValue = supportedFilesystems[0]
 			fsFlagStruct.Value.Set(supportedFilesystems[0])
 			fsFlagStruct.Usage = fsFlagStruct.Usage + strings.Join(supportedFilesystems, ", ")
+		}
+		switch supportedFilesystems[0] {
+		case "exfat":
+			log.Println("Warning: NTFS support not found on this system, falling back to exFAT.")
+			log.Println("Warning: exFAT partitions will not boot on PCs with Secure Boot on.")
+		case "fat32":
+			log.Println("Warning: Only FAT32 support found on this system, large ISOs (>4GB) will fail to flash.")
 		}
 
 		// Parse flags
@@ -169,20 +175,24 @@ func main() {
 			}()
 		}
 
-		// Step 4b: Create NTFS/exFAT partition depending on fs flag
-		windowsPartition := GetBlockDevicePartition(blockDevice, 1)
+		// Step 4b: Format primary partition depending on fs flag
+		primaryPartition := GetBlockDevicePartition(blockDevice, 1)
 		switch *fsFlag {
 		case "exfat":
-			if err := MakeExFAT(windowsPartition); err != nil {
+			if err := MakeExFAT(primaryPartition); err != nil {
 				log.Fatalf("Failed to create exFAT filesystem: %v", err)
 			}
 		case "ntfs":
-			if err := MakeNTFS(windowsPartition); err != nil {
+			if err := MakeNTFS(primaryPartition); err != nil {
 				log.Fatalf("Failed to create NTFS filesystem: %v", err)
+			}
+		case "fat32":
+			if err := MakeFAT32(primaryPartition); err != nil {
+				log.Fatalf("Failed to create FAT32 filesystem: %v", err)
 			}
 		}
 
-		// Step 5: Mount NTFS/exFAT partition, defer unmount
+		// Step 5: Mount primary partition, defer unmount
 		log.Println("Phase 5/" + totalPhases + ": Mounting sources partition")
 		func() {
 			mountPoint, err := os.MkdirTemp(os.TempDir(), "glassusb-")
@@ -190,7 +200,7 @@ func main() {
 				log.Fatalf("Failed to create mount point: %v", err)
 			}
 			defer os.Remove(mountPoint)
-			if err := MountPartition(windowsPartition, mountPoint); err != nil {
+			if err := MountPartition(primaryPartition, mountPoint); err != nil {
 				log.Fatalf("Failed to mount partition: %v", err)
 			}
 			defer func() {
@@ -199,17 +209,17 @@ func main() {
 				}
 			}()
 
-			// Step 6: Unpack Windows ISO contents to NTFS/exFAT partition
+			// Step 6: Unpack Windows ISO contents to primary partition
 			log.Println("Phase 6/" + totalPhases + ": Extracting ISO to sources partition")
 			if err := ExtractISOToLocation(iso, mountPoint); err != nil {
 				log.Fatalf("Failed to extract ISO contents: %v", err)
 			}
 		}()
 
-		// Step 7: Write MBR to device for NTFS/exFAT boot using `ms-sys`
+		// Step 7: Write MBR to device for boot using `ms-sys`
 		if gptFlag == nil || !*gptFlag {
 			log.Println("Phase 7/" + totalPhases + ": Writing MBR bootloader")
-			if err := WriteMBRToPartition(windowsPartition); err != nil {
+			if err := WriteMBRToPartition(primaryPartition); err != nil {
 				log.Fatalf("Failed to write MBR bootloader: %v", err)
 			}
 			if err := WriteMBRToPartition(blockDevice); err != nil {
