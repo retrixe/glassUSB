@@ -31,7 +31,6 @@ func FormatDiskForUEFINTFS(name string, useGpt bool) error {
 	secondaryPartitionEnd := secondaryPartitionStart + secondaryPartitionSize - 1
 
 	var table partition.Table
-	// TODO: GPT doesn't seem to work properly for some reason
 	if useGpt {
 		// Reserve 2048 sectors at the end just like fdisk
 		secondaryPartitionStart -= 2048
@@ -39,6 +38,7 @@ func FormatDiskForUEFINTFS(name string, useGpt bool) error {
 		primaryPartitionSize -= 2048
 		primaryPartitionEnd := primaryPartitionStart + primaryPartitionSize - 1
 		table = &gpt.Table{
+			ProtectiveMBR: true,
 			Partitions: []*gpt.Partition{
 				{Start: uint64(primaryPartitionStart), End: uint64(primaryPartitionEnd), Type: gpt.MicrosoftBasicData, Name: "Windows ISO"},
 				{Start: uint64(secondaryPartitionStart), End: uint64(secondaryPartitionEnd), Type: gpt.EFISystemPartition, Name: "EFI System"},
