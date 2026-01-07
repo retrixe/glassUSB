@@ -1,9 +1,9 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"log"
-	"os"
 
 	"github.com/diskfs/go-diskfs"
 	"github.com/diskfs/go-diskfs/partition"
@@ -59,17 +59,16 @@ func FormatDiskForUEFINTFS(name string, useGpt bool) error {
 	return nil
 }
 
-func WriteUEFINTFSToPartition(partition string) error {
-	file, err := os.OpenFile(partition, os.O_WRONLY|os.O_TRUNC, os.ModePerm)
+// WriteUEFINTFSToPartition writes the UEFI:NTFS image to the specified partition on the device.
+func WriteUEFINTFSToPartition(name string, partition int) error {
+	disk, err := diskfs.Open(name, diskfs.WithOpenMode(diskfs.ReadWrite))
 	if err != nil {
-		return err
+		log.Fatalf("Failed to open destination: %v", err)
 	}
-	defer file.Close()
-	n, err := file.Write(UEFI_NTFS_IMG)
-	if err != nil {
-		return err
-	} else if n != len(UEFI_NTFS_IMG) {
-		return fmt.Errorf("short write: wrote %d of %d bytes", n, len(UEFI_NTFS_IMG))
+	defer disk.Close()
+
+	if _, err := disk.WritePartitionContents(2, bytes.NewReader(UEFI_NTFS_IMG)); err != nil {
+		return fmt.Errorf("failed to write UEFI:NTFS contents to partition: %w", err)
 	}
 	return nil
 }

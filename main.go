@@ -145,12 +145,10 @@ func main() {
 			log.Fatalf("Failed to format disk: %v", err)
 		}
 		blockDevice := args[1]
-		windowsPartition := GetBlockDevicePartition(blockDevice, 1)
-		uefiNtfsPartition := GetBlockDevicePartition(blockDevice, 2)
 
 		// Step 3: Write UEFI:NTFS to second partition
 		log.Println("Phase 3/" + totalPhases + ": Writing UEFI:NTFS bootloader")
-		err = WriteUEFINTFSToPartition(uefiNtfsPartition)
+		err = WriteUEFINTFSToPartition(blockDevice, 2)
 		if err != nil {
 			log.Fatalf("Failed to write UEFI bootloader to second partition: %v", err)
 		}
@@ -172,6 +170,7 @@ func main() {
 		}
 
 		// Step 4b: Create NTFS/exFAT partition depending on fs flag
+		windowsPartition := GetBlockDevicePartition(blockDevice, 1)
 		switch *fsFlag {
 		case "exfat":
 			if err := MakeExFAT(windowsPartition); err != nil {
