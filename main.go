@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	_ "embed"
 )
@@ -190,6 +191,7 @@ func main() {
 				log.Fatalf("Failed to set up loop device: %v", err)
 			}
 			blockDevice = loopDevice
+			time.Sleep(time.Second) // Wait a second for the OS to recognize new partitions
 			defer func() {
 				if err := LoopUnmountFile(blockDevice); err != nil {
 					log.Printf("Failed to detach loop device: %v", err)
