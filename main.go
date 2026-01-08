@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"slices"
+	"strconv"
 	"strings"
 
 	_ "embed"
@@ -117,13 +118,19 @@ func main() {
 			log.Println("Warning: Drives formatted with exFAT (--fs=exfat) will not boot on PCs with Secure Boot enabled.")
 		}
 
-		totalPhases := "7"
+		totalPhasesNum := 7
 		if *gptFlag {
-			totalPhases = "6" // Skip MBR writing phase
+			totalPhasesNum-- // Skip MBR writing phase
 		}
+		if *fsFlag == "fat32" {
+			totalPhasesNum-- // Skip UEFI:NTFS writing phase
+		}
+		totalPhases := strconv.Itoa(totalPhasesNum)
+		currentPhase := 1
 
 		// Step 1: Read ISO
-		log.Println("Phase 1/" + totalPhases + ": Reading ISO")
+		log.Println("Phase " + strconv.Itoa(currentPhase) + "/" + totalPhases + ": Reading ISO")
+		currentPhase++
 		file, err := os.Open(args[0])
 		if err != nil {
 			log.Fatalf("Failed to open ISO: %v", err)
@@ -141,26 +148,35 @@ func main() {
 		} */
 
 		// Step 2: Open the block device and create a new partition table
-		log.Println("Phase 2/" + totalPhases + ": Partitioning destination drive")
+		log.Println("Phase " + strconv.Itoa(currentPhase) + "/" + totalPhases + ": Partitioning destination drive")
+		currentPhase++
 		destStat, err := os.Stat(args[1])
 		if err != nil {
 			log.Fatalf("Failed to get info about destination: %v", err)
 		}
-		err = FormatDiskForUEFINTFS(args[1], gptFlag != nil && *gptFlag)
+		if *fsFlag == "fat32" {
+			err = FormatDiskForSinglePartition(args[1], gptFlag != nil && *gptFlag)
+		} else {
+			err = FormatDiskForUEFINTFS(args[1], gptFlag != nil && *gptFlag)
+		}
 		if err != nil {
 			log.Fatalf("Failed to format disk: %v", err)
 		}
 		blockDevice := args[1]
 
 		// Step 3: Write UEFI:NTFS to second partition
-		log.Println("Phase 3/" + totalPhases + ": Writing UEFI:NTFS bootloader")
-		err = WriteUEFINTFSToPartition(blockDevice, 2)
-		if err != nil {
-			log.Fatalf("Failed to write UEFI bootloader to second partition: %v", err)
+		if *fsFlag != "fat32" {
+			log.Println("Phase " + strconv.Itoa(currentPhase) + "/" + totalPhases + ": Writing UEFI:NTFS bootloader")
+			currentPhase++
+			err = WriteUEFINTFSToPartition(blockDevice, 2)
+			if err != nil {
+				log.Fatalf("Failed to write UEFI bootloader to second partition: %v", err)
+			}
 		}
 
 		// Step 4a: Mount a regular file destination as a loopback device
-		log.Println("Phase 4/" + totalPhases + ": Creating sources partition")
+		log.Println("Phase " + strconv.Itoa(currentPhase) + "/" + totalPhases + ": Creating sources partition")
+		currentPhase++
 		// TODO: Guard this behind a flag?
 		if destStat.Mode().IsRegular() {
 			loopDevice, err := LoopMountFile(args[1])
@@ -193,7 +209,8 @@ func main() {
 		}
 
 		// Step 5: Mount primary partition, defer unmount
-		log.Println("Phase 5/" + totalPhases + ": Mounting sources partition")
+		log.Println("Phase " + strconv.Itoa(currentPhase) + "/" + totalPhases + ": Mounting sources partition")
+		currentPhase++
 		func() {
 			mountPoint, err := os.MkdirTemp(os.TempDir(), "glassusb-")
 			if err != nil {
@@ -210,7 +227,8 @@ func main() {
 			}()
 
 			// Step 6: Unpack Windows ISO contents to primary partition
-			log.Println("Phase 6/" + totalPhases + ": Extracting ISO to sources partition")
+			log.Println("Phase " + strconv.Itoa(currentPhase) + "/" + totalPhases + ": Extracting ISO to sources partition")
+			currentPhase++
 			if err := ExtractISOToLocation(iso, mountPoint); err != nil {
 				log.Fatalf("Failed to extract ISO contents: %v", err)
 			}
@@ -218,7 +236,8 @@ func main() {
 
 		// Step 7: Write MBR to device for boot using `ms-sys`
 		if gptFlag == nil || !*gptFlag {
-			log.Println("Phase 7/" + totalPhases + ": Writing MBR bootloader")
+			log.Println("Phase " + strconv.Itoa(currentPhase) + "/" + totalPhases + ": Writing MBR bootloader")
+			currentPhase++
 			if err := WriteMBRToPartition(primaryPartition); err != nil {
 				log.Fatalf("Failed to write MBR bootloader: %v", err)
 			}
