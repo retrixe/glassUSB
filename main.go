@@ -92,7 +92,8 @@ func main() {
 			log.Println("Warning: NTFS support not found on this system, falling back to exFAT.")
 			log.Println("Warning: exFAT partitions will not boot on PCs with Secure Boot on.")
 		case "fat32":
-			log.Println("Warning: Only FAT32 support found on this system, large ISOs (>4GB) will fail to flash.")
+			log.Println("Warning: NTFS and exFAT support not found on this system, falling back to FAT32.")
+			log.Println("Warning: Large ISOs (>4GB) will fail to flash to a FAT32 partition.")
 		}
 
 		// Parse flags
@@ -101,21 +102,26 @@ func main() {
 		if len(args) != 2 {
 			flashFlagSet.Usage()
 			os.Exit(1)
-		} else if fsFlag == nil || (*fsFlag != "exfat" && *fsFlag != "ntfs" && *fsFlag != "") {
+		} else if fsFlag == nil || (*fsFlag != "exfat" && *fsFlag != "ntfs" && *fsFlag != "fat32" && *fsFlag != "") {
 			log.Println("Invalid value provided for `-fs` flag!")
 			flashFlagSet.Usage()
 			os.Exit(1)
 		} else if *fsFlag == "" {
-			log.Fatalln("Neither NTFS nor exFAT support were found on this system, exiting...")
+			log.Fatalln("This system does not have any filesystem drivers supported by glassUSB, exiting...")
 		} else if *fsFlag == "exfat" && !slices.Contains(supportedFilesystems, "exfat") {
 			log.Fatalln("exFAT specified, but support is missing on this system, exiting...")
 		} else if *fsFlag == "ntfs" && !slices.Contains(supportedFilesystems, "ntfs") {
 			log.Fatalln("NTFS specified, but support is missing on this system, exiting...")
+		} else if *fsFlag == "fat32" && !slices.Contains(supportedFilesystems, "fat32") {
+			log.Fatalln("FAT32 specified, but support is missing on this system, exiting...")
 		}
 
-		// Warn exFAT does not work with Secure Boot enabled.
-		if *fsFlag == "exfat" {
+		// Warn about exFAT and FAT32 limitations
+		switch *fsFlag {
+		case "exfat":
 			log.Println("Warning: Drives formatted with exFAT (--fs=exfat) will not boot on PCs with Secure Boot enabled.")
+		case "fat32":
+			log.Println("Warning: Using FAT32 (--fs=fat32) may cause flashing to fail for ISOs larger than 4 GB in size.")
 		}
 
 		totalPhasesNum := 7
