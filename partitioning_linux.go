@@ -2,7 +2,13 @@
 
 package main
 
-import "strconv"
+import (
+	"os"
+	"strconv"
+	"unsafe"
+
+	"golang.org/x/sys/unix"
+)
 
 func GetBlockDevicePartition(blockDevice string, partNumber int) string {
 	blockDevicePartition := blockDevice
@@ -10,4 +16,18 @@ func GetBlockDevicePartition(blockDevice string, partNumber int) string {
 		blockDevicePartition += "p"
 	}
 	return blockDevicePartition + strconv.Itoa(partNumber)
+}
+
+func GetBlockDeviceSize(blockDevice string) (int64, error) {
+	file, err := os.Open(blockDevice)
+	if err != nil {
+		return 0, err
+	}
+	defer file.Close()
+	var value uint64
+	_, _, errno := unix.Syscall(unix.SYS_IOCTL, file.Fd(), unix.BLKGETSIZE64, uintptr(unsafe.Pointer(&value)))
+	if errno != 0 {
+		return 0, errno
+	}
+	return int64(value), nil
 }

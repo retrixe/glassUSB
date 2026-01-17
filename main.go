@@ -9,6 +9,8 @@ import (
 	"strings"
 
 	_ "embed"
+
+	"github.com/retrixe/glassusb/imprint"
 )
 
 const version = "1.0.0-dev"
@@ -142,6 +144,10 @@ func main() {
 			log.Fatalf("Failed to open ISO: %v", err)
 		}
 		defer file.Close()
+		srcStat, err := file.Stat()
+		if err != nil {
+			log.Fatalf("Failed to stat ISO file: %v", err)
+		}
 		iso, err := OpenWindowsISO(file)
 		if err != nil {
 			log.Fatalf("Failed to read UDF filesystem on ISO: %v", err)
@@ -166,7 +172,17 @@ func main() {
 				log.Fatalf("Destination %s is not a valid block device!", blockDevice)
 			}
 		}
-
+		blockDeviceSize, err := GetBlockDeviceSize(blockDevice)
+		if err != nil {
+			log.Fatalf("Failed to get size of destination: %v", err)
+		} else if srcStat.Size() > blockDeviceSize {
+			disableSizeCheck, exists := os.LookupEnv("__GLASSUSB_DEBUG_DISABLE_SIZE_CHECK")
+			if !exists || (disableSizeCheck != "true" && disableSizeCheck != "1") {
+				log.Fatalf("Cannot write ISO to destination: ISO size (%s) is larger than device size (%s)!",
+					imprint.BytesToString(int(srcStat.Size()), true),
+					imprint.BytesToString(int(blockDeviceSize), true))
+			}
+		}
 		if *fsFlag == "fat32" {
 			err = FormatDiskForSinglePartition(blockDevice, gptFlag != nil && *gptFlag)
 		} else {
