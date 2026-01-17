@@ -183,6 +183,10 @@ func main() {
 					imprint.BytesToString(int(blockDeviceSize), true))
 			}
 		}
+		err = imprint.UnmountDevice(blockDevice)
+		if err != nil && err != imprint.ErrNotBlockDevice { // Ignore non-block-device error here
+			log.Fatalf("Failed to unmount destination device: %v", err)
+		}
 		if *fsFlag == "fat32" {
 			err = FormatDiskForSinglePartition(blockDevice, gptFlag != nil && *gptFlag)
 		} else {
