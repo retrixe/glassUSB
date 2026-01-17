@@ -7,7 +7,6 @@ import (
 	"slices"
 	"strconv"
 	"strings"
-	"time"
 
 	_ "embed"
 )
@@ -34,7 +33,7 @@ var fsFlag = flashFlagSet.String("fs", "",
 		"\nAvailable options: ")
 
 /*
-	 TODO: Support FAT32 + secondary-fs
+	 TODO: Support FAT32 + secondary-fs or some kind of splitting
 		var secondaryFsFlag = flashFlagSet.String("secondary-fs", "exfat",
 			"Filesystem to use for second partition if primary-fs=fat32 and ISO > 4GB\n"+
 				"Options: exfat, ntfs")
@@ -155,21 +154,27 @@ func main() {
 		} */
 
 		// Step 2: Open the block device and create a new partition table
+		blockDevice := args[1]
 		currentPhase++
 		log.Println("Phase " + strconv.Itoa(currentPhase) + "/" + totalPhases + ": Partitioning destination drive")
-		destStat, err := os.Stat(args[1])
+		destStat, err := os.Stat(blockDevice)
 		if err != nil {
 			log.Fatalf("Failed to get info about destination: %v", err)
+		} else if destStat.Mode().Type()&os.ModeDevice == 0 {
+			allowRegularDest, exists := os.LookupEnv("__GLASSUSB_DEBUG_ALLOW_REGULAR_DEST")
+			if !exists || (allowRegularDest != "true" && allowRegularDest != "1") {
+				log.Fatalf("Destination %s is not a valid block device!", blockDevice)
+			}
 		}
+
 		if *fsFlag == "fat32" {
-			err = FormatDiskForSinglePartition(args[1], gptFlag != nil && *gptFlag)
+			err = FormatDiskForSinglePartition(blockDevice, gptFlag != nil && *gptFlag)
 		} else {
-			err = FormatDiskForUEFINTFS(args[1], gptFlag != nil && *gptFlag)
+			err = FormatDiskForUEFINTFS(blockDevice, gptFlag != nil && *gptFlag)
 		}
 		if err != nil {
 			log.Fatalf("Failed to format disk: %v", err)
 		}
-		blockDevice := args[1]
 
 		// Step 3: Write UEFI:NTFS to second partition
 		if *fsFlag != "fat32" {
@@ -181,25 +186,9 @@ func main() {
 			}
 		}
 
-		// Step 4a: Mount a regular file destination as a loopback device
+		// Step 4: Format primary partition depending on fs flag
 		currentPhase++
 		log.Println("Phase " + strconv.Itoa(currentPhase) + "/" + totalPhases + ": Creating sources partition")
-		// TODO: Guard this behind a flag?
-		if destStat.Mode().IsRegular() {
-			loopDevice, err := LoopMountFile(args[1])
-			if err != nil {
-				log.Fatalf("Failed to set up loop device: %v", err)
-			}
-			blockDevice = loopDevice
-			time.Sleep(time.Second) // Wait a second for the OS to recognize new partitions
-			defer func() {
-				if err := LoopUnmountFile(blockDevice); err != nil {
-					log.Printf("Failed to detach loop device: %v", err)
-				}
-			}()
-		}
-
-		// Step 4b: Format primary partition depending on fs flag
 		primaryPartition := GetBlockDevicePartition(blockDevice, 1)
 		switch *fsFlag {
 		case "exfat":
