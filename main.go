@@ -33,15 +33,14 @@ var fsFlag = flashFlagSet.String("fs", "",
 		//"'sources/install.wim' is larger than 4 GB, a second NTFS/exFAT partition will be\n"+
 		//"created to store the WIM file on.\n"+
 		"\nAvailable options: ")
+var disableValidationFlag = flashFlagSet.Bool("disable-validation", false,
+	"Disable validation of written files")
 
 /*
 	 TODO: Support FAT32 + secondary-fs or some kind of splitting
 		var secondaryFsFlag = flashFlagSet.String("secondary-fs", "exfat",
 			"Filesystem to use for second partition if primary-fs=fat32 and ISO > 4GB\n"+
 				"Options: exfat, ntfs")
-	 TODO: Support validation of written files
-		var disableValidationFlag = flashFlagSet.Bool("disable-validation", false,
-			"Disable validation of written files")
 */
 
 //go:embed binaries/uefi-ntfs.img
@@ -129,6 +128,9 @@ func main() {
 		totalPhasesNum := 7
 		if *gptFlag {
 			totalPhasesNum-- // Skip MBR writing phase
+		}
+		if *disableValidationFlag {
+			totalPhasesNum-- // Skip validation phase
 		}
 		if *fsFlag == "fat32" {
 			totalPhasesNum-- // Skip UEFI:NTFS writing phase
@@ -225,10 +227,10 @@ func main() {
 			}
 		}
 
-		// Step 5: Mount primary partition, defer unmount
-		currentPhase++
-		log.Println("Phase " + strconv.Itoa(currentPhase) + "/" + totalPhases + ": Mounting sources partition")
+		// Step 5: Unpack Windows ISO contents to primary partition
 		func() {
+			currentPhase++
+			log.Println("Phase " + strconv.Itoa(currentPhase) + "/" + totalPhases + ": Extracting ISO to sources partition")
 			mountPoint, err := os.MkdirTemp(os.TempDir(), "glassusb-")
 			if err != nil {
 				log.Fatalf("Failed to create mount point: %v", err)
@@ -242,12 +244,33 @@ func main() {
 					log.Printf("Failed to unmount partition: %v", err)
 				}
 			}()
-
-			// Step 6: Unpack Windows ISO contents to primary partition
-			currentPhase++
-			log.Println("Phase " + strconv.Itoa(currentPhase) + "/" + totalPhases + ": Extracting ISO to sources partition")
 			if err := ExtractISOToLocation(iso, mountPoint); err != nil {
 				log.Fatalf("Failed to extract ISO contents: %v", err)
+			}
+		}()
+
+		// Step 6: Validate Windows ISO contents on primary partition
+		func() {
+			if *disableValidationFlag {
+				return
+			}
+			currentPhase++
+			log.Println("Phase " + strconv.Itoa(currentPhase) + "/" + totalPhases + ": Validating ISO contents on sources partition")
+			mountPoint, err := os.MkdirTemp(os.TempDir(), "glassusb-")
+			if err != nil {
+				log.Fatalf("Failed to create mount point: %v", err)
+			}
+			defer os.Remove(mountPoint)
+			if err := MountPartition(primaryPartition, mountPoint); err != nil {
+				log.Fatalf("Failed to mount partition: %v", err)
+			}
+			defer func() {
+				if err := UnmountPartition(mountPoint); err != nil {
+					log.Printf("Failed to unmount partition: %v", err)
+				}
+			}()
+			if err := ValidateISOAgainstLocation(iso, mountPoint); err != nil {
+				log.Fatalf("Failed to validate ISO contents: %v", err)
 			}
 		}()
 

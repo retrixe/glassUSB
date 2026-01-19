@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"io"
@@ -11,7 +12,7 @@ import (
 	"github.com/diskfs/go-diskfs"
 )
 
-var ErrInvalidWindowsISO = errors.New("this file is not recognised as a valid Windows ISO image")
+var ErrInvalidWindowsISO = errors.New("this file is not recognised as a valid Windows ISO image in UDF format")
 
 func OpenWindowsISO(file *os.File) (*udf.Udf, error) {
 	if !IsValidWindowsISO(file) {
@@ -81,6 +82,60 @@ func extractISOFileToLocation(file udf.File, location string) error {
 		err = newFile.Sync()
 		if err != nil {
 			return fmt.Errorf("failed to sync file %s: %w", file.Name(), err)
+		}
+	}
+	return nil
+}
+
+func ValidateISOAgainstLocation(iso *udf.Udf, location string) error {
+	for _, file := range iso.ReadDir(nil) {
+		if err := validateISOFileAgainstLocation(file, location); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func validateISOFileAgainstLocation(file udf.File, location string) error {
+	if file.Name() == "install.wim" {
+		return nil // FIXME: Skip install.wim
+	}
+	if file.IsDir() {
+		// TODO: Check if there's extra files in location that are not in ISO
+		folderPath := filepath.Join(location, file.Name())
+		for _, child := range file.ReadDir() {
+			if err := validateISOFileAgainstLocation(child, folderPath); err != nil {
+				return err
+			}
+		}
+	} else {
+		srcReader := file.NewReader()
+		destFile, err := os.Open(filepath.Join(location, file.Name()))
+		if err != nil {
+			return fmt.Errorf("failed to open file %s: %w", file.Name(), err)
+		}
+		defer destFile.Close()
+		buf1 := make([]byte, 4*1024*1024)
+		buf2 := make([]byte, 4*1024*1024)
+		for {
+			n1, err1 := srcReader.Read(buf1)
+			if err1 != nil && err1 != io.EOF {
+				return fmt.Errorf("failed to read file %s from ISO: %w", file.Name(), err1)
+			}
+			n2, err2 := io.ReadFull(destFile, buf2[:n1])
+			if err2 != nil { // EOF should not happen here
+				return fmt.Errorf("failed to read file %s from destination: %w", file.Name(), err2)
+			}
+			if !bytes.Equal(buf1[:n1], buf2[:n2]) {
+				return fmt.Errorf("contents of file %s do not match the ISO", file.Name())
+			}
+			if err1 == io.EOF {
+				break
+			}
+		}
+		n, err := destFile.Read(buf2)
+		if n > 0 || err != io.EOF {
+			return fmt.Errorf("file %s on disk is larger than expected", file.Name())
 		}
 	}
 	return nil
