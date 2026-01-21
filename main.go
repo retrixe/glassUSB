@@ -1,7 +1,9 @@
 package main
 
 import (
+	"errors"
 	"flag"
+	"fmt"
 	"log"
 	"os"
 	"slices"
@@ -10,6 +12,7 @@ import (
 
 	_ "embed"
 
+	"github.com/ncruces/zenity"
 	"github.com/retrixe/imprint/imaging"
 )
 
@@ -22,6 +25,7 @@ func mainUsage() {
 	println("Usage: glassUSB [command] [options]")
 	println("\nAvailable commands:")
 	println("  flash       Flash a Windows ISO to a specific USB device.")
+	println("  wizard      Start the GUI wizard for flashing Windows ISOs to a USB device.")
 	println("\nOptions:")
 	flag.PrintDefaults()
 }
@@ -51,6 +55,13 @@ func flashUsage() {
 	flashFlagSet.PrintDefaults()
 }
 
+func flashWizardUsage() {
+	println("Usage: glassUSB wizard [options]")
+	println("\nStart the GUI wizard for flashing Windows ISOs to a USB device.")
+	println("\nOptions:")
+	flashFlagSet.PrintDefaults()
+}
+
 /*
 	 TODO: Support FAT32 + secondary-fs or some kind of splitting
 		var secondaryFsFlag = flashFlagSet.String("secondary-fs", "exfat",
@@ -72,14 +83,17 @@ func main() {
 		println("glassUSB version v" + version)
 		return
 	} else if len(os.Args) >= 2 && os.Args[1] == "flash" {
-		flashCommand()
+		flashCommand(false)
+	} else if len(os.Args) >= 2 && os.Args[1] == "wizard" {
+		flashFlagSet.Usage = flashWizardUsage
+		flashCommand(true)
 	} else {
 		flag.Usage()
 		os.Exit(1)
 	}
 }
 
-func flashCommand() {
+func flashCommand(wizard bool) {
 	log.SetFlags(0)
 	log.SetOutput(os.Stderr)
 	log.SetPrefix("[glassUSB] ")
@@ -113,7 +127,7 @@ func flashCommand() {
 	// Parse flags
 	flashFlagSet.Parse(os.Args[2:])
 	args := flashFlagSet.Args()
-	if len(args) != 2 {
+	if (wizard && len(args) != 0) || (!wizard && len(args) != 2) {
 		flashFlagSet.Usage()
 		os.Exit(1)
 	} else if fsFlag == nil || (*fsFlag != "exfat" && *fsFlag != "ntfs" && *fsFlag != "fat32" && *fsFlag != "") {
@@ -136,6 +150,130 @@ func flashCommand() {
 		log.Println("Warning: Drives formatted with exFAT (--fs=exfat) will not boot on PCs with Secure Boot enabled.")
 	case "fat32":
 		log.Println("Warning: Using FAT32 (--fs=fat32) may cause flashing to fail for ISOs larger than 4 GB in size.")
+	}
+
+	// If using the wizard, prompt user for ISO and device
+	if wizard {
+		log.Fatalln("don't use this yet")
+	}
+	if wizard {
+		err := zenity.Question(`This wizard will guide you through the process of creating a Windows installation USB drive.
+
+Make sure you have a spare USB flash drive connected to your computer (>8 GB recommended for Windows 11), and a Windows installation ISO downloaded.
+
+Press 'Continue' to select the Windows ISO you downloaded. Supported versions of Windows include Vista, 7 and newer.`,
+			zenity.Width(640),
+			zenity.Height(480),
+			zenity.WindowIcon(zenity.InfoIcon),
+			zenity.Title("glassUSB Media Creation Wizard"),
+			zenity.Icon(zenity.InfoIcon),
+			zenity.CancelLabel("Exit"),
+			zenity.OKLabel("Continue"))
+		if err != nil {
+			log.Fatalf("Failed to continue with wizard: %v", err)
+		}
+
+		wd, err := os.Getwd()
+		if err != nil {
+			err = zenity.Error(fmt.Sprintf("Failed to select ISO file: %v", err),
+				zenity.Width(640),
+				zenity.WindowIcon(zenity.ErrorIcon),
+				zenity.Title("glassUSB Media Creation Wizard"),
+				zenity.Icon(zenity.ErrorIcon),
+				zenity.OKLabel("Exit"))
+			log.Fatalf("Failed to select ISO file: %v", err)
+		}
+		isoPath, err := zenity.SelectFile(
+			zenity.WindowIcon(zenity.QuestionIcon),
+			zenity.Title("glassUSB - Select Windows ISO"),
+			zenity.Filename(wd+string(os.PathSeparator)),
+			zenity.FileFilters{
+				{Name: "ISO Images", Patterns: []string{"*.iso", "*.img"}},
+				{Name: "All Files", Patterns: []string{"*"}},
+			},
+		)
+		if err != nil {
+			err = zenity.Error(fmt.Sprintf("Failed to select ISO file: %v", err),
+				zenity.Width(640),
+				zenity.WindowIcon(zenity.ErrorIcon),
+				zenity.Title("glassUSB Media Creation Wizard"),
+				zenity.Icon(zenity.ErrorIcon),
+				zenity.OKLabel("Exit"))
+			log.Fatalf("Failed to select ISO file: %v", err)
+		}
+
+		var device string
+		for {
+			devices, err := imaging.GetDevices(imaging.SystemPlatform)
+			if err != nil {
+				err = zenity.Error(fmt.Sprintf("Failed to list devices: %v", err),
+					zenity.Width(640),
+					zenity.WindowIcon(zenity.ErrorIcon),
+					zenity.Title("glassUSB Media Creation Wizard"),
+					zenity.Icon(zenity.ErrorIcon),
+					zenity.OKLabel("Exit"))
+				log.Fatalf("Failed to list devices: %v", err)
+			} else if len(devices) != 0 { // FIXME: Remove this when done testing
+				err = zenity.Error("Failed to find any USB devices connected to your computer.\n\n"+
+					"Please connect a USB flash drive and try again.",
+					zenity.Width(640),
+					zenity.WindowIcon(zenity.ErrorIcon),
+					zenity.Title("glassUSB - Select target USB drive"),
+					zenity.Icon(zenity.ErrorIcon),
+					zenity.OKLabel("Exit"),
+					zenity.ExtraButton("Rescan devices"))
+				if err == nil {
+					log.Fatalln("No USB devices connected, exiting...")
+				} else if !errors.Is(err, zenity.ErrExtraButton) {
+					log.Fatalf("Failed to list devices: %v", err)
+				}
+				continue
+			}
+
+			device, err = zenity.List("Select a target device to flash the Windows ISO to:\n\n"+
+				"⚠️ Warning: All data on the USB drive you select will be ERASED!\n"+
+				"If you have any files stored on the drive, back them up before proceeding!",
+				[]string{"sus", "pus", "wus", "dus"}, // FIXME: Replace with actual device list
+				zenity.Width(640),
+				zenity.Height(480),
+				zenity.WindowIcon(zenity.QuestionIcon),
+				zenity.Title("glassUSB - Select target USB drive"),
+				zenity.DisallowEmpty(),
+				zenity.RadioList(),
+				zenity.OKLabel("Continue"),
+				zenity.ExtraButton("Rescan devices"),
+			)
+			if errors.Is(err, zenity.ErrExtraButton) {
+				continue
+			} else if err != nil {
+				log.Fatalf("Failed to select target device: %v", err)
+			} else if device != "" {
+				break
+			}
+		}
+
+		err = zenity.Question(`The following Windows ISO will be flashed to the target USB drive:
+
+`+isoPath+`
+
+The following device will be converted into a Windows installation USB drive:
+
+`+device+`
+
+⚠️ Warning: All data on this USB drive will be ERASED! If you have any files stored on the drive, cancel here and back them up before proceeding to flash!`,
+			zenity.Width(640),
+			zenity.Height(480),
+			zenity.WindowIcon(zenity.InfoIcon),
+			zenity.Title("glassUSB - Confirm Flash and Data Wipe"),
+			zenity.Icon(zenity.InfoIcon),
+			zenity.CancelLabel("Exit"),
+			zenity.OKLabel("Continue"))
+		if err != nil {
+			log.Fatalf("Failed to continue with wizard: %v", err)
+		}
+
+		args = []string{isoPath, device}
+		return // FIXME: Remove this
 	}
 
 	totalPhasesNum := 7
