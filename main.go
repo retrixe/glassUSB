@@ -154,9 +154,6 @@ func flashCommand(wizard bool) {
 
 	// If using the wizard, prompt user for ISO and device
 	if wizard {
-		log.Fatalln("don't use this yet")
-	}
-	if wizard {
 		err := zenity.Question(`This wizard will guide you through the process of creating a Windows installation USB drive.
 
 Make sure you have a spare USB flash drive connected to your computer (>8 GB recommended for Windows 11), and a Windows installation ISO downloaded.
@@ -202,7 +199,7 @@ Press 'Continue' to select the Windows ISO you downloaded. Supported versions of
 			log.Fatalf("Failed to select ISO file: %v", err)
 		}
 
-		var device string
+		var device, deviceName string
 		for {
 			devices, err := imaging.GetDevices(imaging.SystemPlatform)
 			if err != nil {
@@ -213,7 +210,7 @@ Press 'Continue' to select the Windows ISO you downloaded. Supported versions of
 					zenity.Icon(zenity.ErrorIcon),
 					zenity.OKLabel("Exit"))
 				log.Fatalf("Failed to list devices: %v", err)
-			} else if len(devices) != 0 { // FIXME: Remove this when done testing
+			} else if len(devices) == 0 {
 				err = zenity.Error("Failed to find any USB devices connected to your computer.\n\n"+
 					"Please connect a USB flash drive and try again.",
 					zenity.Width(640),
@@ -230,10 +227,18 @@ Press 'Continue' to select the Windows ISO you downloaded. Supported versions of
 				continue
 			}
 
+			stringifiedDevices := make([]string, len(devices))
+			for index, device := range devices {
+				if device.Model == "" {
+					stringifiedDevices[index] = device.Name + " (" + device.Size + ")"
+				} else {
+					stringifiedDevices[index] = device.Name + " (" + device.Model + ", " + device.Size + ")"
+				}
+			}
 			device, err = zenity.List("Select a target device to flash the Windows ISO to:\n\n"+
 				"⚠️ Warning: All data on the USB drive you select will be ERASED!\n"+
 				"If you have any files stored on the drive, back them up before proceeding!",
-				[]string{"sus", "pus", "wus", "dus"}, // FIXME: Replace with actual device list
+				stringifiedDevices,
 				zenity.Width(640),
 				zenity.Height(480),
 				zenity.WindowIcon(zenity.QuestionIcon),
@@ -248,6 +253,7 @@ Press 'Continue' to select the Windows ISO you downloaded. Supported versions of
 			} else if err != nil {
 				log.Fatalf("Failed to select target device: %v", err)
 			} else if device != "" {
+				deviceName = device[:strings.LastIndex(device, " (")]
 				break
 			}
 		}
@@ -272,8 +278,7 @@ The following device will be converted into a Windows installation USB drive:
 			log.Fatalf("Failed to continue with wizard: %v", err)
 		}
 
-		args = []string{isoPath, device}
-		return // FIXME: Remove this
+		args = []string{isoPath, deviceName}
 	}
 
 	totalPhasesNum := 7
