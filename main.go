@@ -10,7 +10,7 @@ import (
 
 	_ "embed"
 
-	"github.com/retrixe/glassusb/imprint"
+	"github.com/retrixe/imprint/imaging"
 )
 
 const version = "1.0.0-dev"
@@ -194,12 +194,12 @@ func flashCommand() {
 		disableSizeCheck, exists := os.LookupEnv("__GLASSUSB_DEBUG_DISABLE_SIZE_CHECK")
 		if !exists || (disableSizeCheck != "true" && disableSizeCheck != "1") {
 			log.Fatalf("Cannot write ISO to destination: ISO size (%s) is larger than device size (%s)!",
-				imprint.BytesToString(int(srcStat.Size()), true),
-				imprint.BytesToString(int(blockDeviceSize), true))
+				imaging.BytesToString(int(srcStat.Size()), true),
+				imaging.BytesToString(int(blockDeviceSize), true))
 		}
 	}
-	err = imprint.UnmountDevice(blockDevice)
-	if err != nil && err != imprint.ErrNotBlockDevice { // Ignore non-block-device error here
+	err = imaging.UnmountDevice(blockDevice)
+	if err != nil && err != imaging.ErrNotBlockDevice { // Ignore non-block-device error here
 		log.Fatalf("Failed to unmount destination device: %v", err)
 	}
 	if *fsFlag == "fat32" {

@@ -5,6 +5,7 @@ go 1.24.6
 require (
 	github.com/Xmister/udf v0.0.0-20210116171753-6c18325874a7
 	github.com/diskfs/go-diskfs v1.7.0
+	github.com/retrixe/imprint v0.0.0-20260121130316-c7bc5c82e3a0
 	golang.org/x/sys v0.19.0
 )
 
