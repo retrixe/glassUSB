@@ -3,7 +3,6 @@ package main
 import (
 	"bytes"
 	"fmt"
-	"log"
 
 	"github.com/diskfs/go-diskfs"
 	"github.com/diskfs/go-diskfs/partition"
@@ -15,7 +14,7 @@ import (
 func FormatDiskForSinglePartition(name string, useGpt bool) error {
 	disk, err := diskfs.Open(name, diskfs.WithOpenMode(diskfs.ReadWrite))
 	if err != nil {
-		log.Fatalf("Failed to open destination: %v", err)
+		return fmt.Errorf("failed to open destination: %v", err)
 	}
 	defer disk.Close()
 
@@ -53,7 +52,7 @@ func FormatDiskForSinglePartition(name string, useGpt bool) error {
 func FormatDiskForUEFINTFS(name string, useGpt bool) error {
 	disk, err := diskfs.Open(name, diskfs.WithOpenMode(diskfs.ReadWrite))
 	if err != nil {
-		log.Fatalf("Failed to open destination: %v", err)
+		return fmt.Errorf("failed to open destination: %v", err)
 	}
 	defer disk.Close()
 
@@ -99,7 +98,7 @@ func FormatDiskForUEFINTFS(name string, useGpt bool) error {
 func WriteUEFINTFSToPartition(name string, partition int) error {
 	disk, err := diskfs.Open(name, diskfs.WithOpenMode(diskfs.ReadWrite))
 	if err != nil {
-		log.Fatalf("Failed to open destination: %v", err)
+		return fmt.Errorf("failed to open destination: %v", err)
 	}
 	defer disk.Close()
 
