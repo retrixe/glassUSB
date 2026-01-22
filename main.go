@@ -97,6 +97,13 @@ func flashCommand(wizard bool) {
 	log.SetFlags(0)
 	log.SetOutput(os.Stderr)
 	log.SetPrefix("[glassUSB] ")
+	var dlg zenity.ProgressDialog
+	logInfo := func(message string) {
+		log.Println(message)
+		if dlg != nil {
+			dlg.Text(message)
+		}
+	}
 
 	// Look for prerequisites on system and change defaults accordingly
 	fsFlagStruct := flashFlagSet.Lookup("fs")
@@ -278,6 +285,21 @@ The following device will be converted into a Windows installation USB drive:
 			log.Fatalf("Failed to continue with wizard: %v", err)
 		}
 
+		dlg, err = zenity.Progress(
+			zenity.Width(640),
+			zenity.WindowIcon(zenity.InfoIcon),
+			zenity.Title("glassUSB Media Creation Wizard"),
+			zenity.Icon(zenity.NoIcon),
+			zenity.Pulsate(),
+			// TODO: Could we use TimeRemaining at the flash stage
+			zenity.NoCancel(), // TODO: Once cancellation is implemented we ball
+			zenity.CancelLabel("Cancel"),
+			zenity.OKLabel("Finish"))
+		if err != nil {
+			log.Fatalf("Failed to continue with wizard: %v", err)
+		}
+		defer dlg.Close()
+
 		args = []string{isoPath, deviceName}
 	}
 
@@ -296,7 +318,7 @@ The following device will be converted into a Windows installation USB drive:
 
 	// Step 1: Read ISO
 	currentPhase++
-	log.Println("Phase " + strconv.Itoa(currentPhase) + "/" + totalPhases + ": Reading ISO")
+	logInfo("Phase " + strconv.Itoa(currentPhase) + "/" + totalPhases + ": Reading ISO")
 	file, err := os.Open(args[0])
 	if err != nil {
 		log.Fatalf("Failed to open ISO: %v", err)
@@ -320,7 +342,7 @@ The following device will be converted into a Windows installation USB drive:
 	// Step 2: Open the block device and create a new partition table
 	blockDevice := args[1]
 	currentPhase++
-	log.Println("Phase " + strconv.Itoa(currentPhase) + "/" + totalPhases + ": Partitioning destination drive")
+	logInfo("Phase " + strconv.Itoa(currentPhase) + "/" + totalPhases + ": Partitioning destination drive")
 	destStat, err := os.Stat(blockDevice)
 	if err != nil {
 		log.Fatalf("Failed to get info about destination: %v", err)
@@ -357,7 +379,7 @@ The following device will be converted into a Windows installation USB drive:
 	// Step 3: Write UEFI:NTFS to second partition
 	if *fsFlag != "fat32" {
 		currentPhase++
-		log.Println("Phase " + strconv.Itoa(currentPhase) + "/" + totalPhases + ": Writing UEFI:NTFS bootloader")
+		logInfo("Phase " + strconv.Itoa(currentPhase) + "/" + totalPhases + ": Writing UEFI:NTFS bootloader")
 		err = WriteUEFINTFSToPartition(blockDevice, 2)
 		if err != nil {
 			log.Fatalf("Failed to write UEFI bootloader to second partition: %v", err)
@@ -366,7 +388,7 @@ The following device will be converted into a Windows installation USB drive:
 
 	// Step 4: Format primary partition depending on fs flag
 	currentPhase++
-	log.Println("Phase " + strconv.Itoa(currentPhase) + "/" + totalPhases + ": Creating sources partition")
+	logInfo("Phase " + strconv.Itoa(currentPhase) + "/" + totalPhases + ": Creating sources partition")
 	primaryPartition := GetBlockDevicePartition(blockDevice, 1)
 	switch *fsFlag {
 	case "exfat":
@@ -386,7 +408,7 @@ The following device will be converted into a Windows installation USB drive:
 	// Step 5: Unpack Windows ISO contents to primary partition
 	func() {
 		currentPhase++
-		log.Println("Phase " + strconv.Itoa(currentPhase) + "/" + totalPhases + ": Extracting ISO to sources partition")
+		logInfo("Phase " + strconv.Itoa(currentPhase) + "/" + totalPhases + ": Extracting ISO to sources partition")
 		mountPoint, err := os.MkdirTemp(os.TempDir(), "glassusb-")
 		if err != nil {
 			log.Fatalf("Failed to create mount point: %v", err)
@@ -411,7 +433,7 @@ The following device will be converted into a Windows installation USB drive:
 			return
 		}
 		currentPhase++
-		log.Println("Phase " + strconv.Itoa(currentPhase) + "/" + totalPhases + ": Validating ISO contents on sources partition")
+		logInfo("Phase " + strconv.Itoa(currentPhase) + "/" + totalPhases + ": Validating ISO contents on sources partition")
 		mountPoint, err := os.MkdirTemp(os.TempDir(), "glassusb-")
 		if err != nil {
 			log.Fatalf("Failed to create mount point: %v", err)
@@ -433,12 +455,21 @@ The following device will be converted into a Windows installation USB drive:
 	// Step 7: Write MBR to device for boot using `ms-sys`
 	if gptFlag == nil || !*gptFlag {
 		currentPhase++
-		log.Println("Phase " + strconv.Itoa(currentPhase) + "/" + totalPhases + ": Writing MBR bootloader")
+		logInfo("Phase " + strconv.Itoa(currentPhase) + "/" + totalPhases + ": Writing MBR bootloader")
 		if err := WriteMBRToPartition(primaryPartition); err != nil {
 			log.Fatalf("Failed to write MBR bootloader: %v", err)
 		}
 		if err := WriteMBRToPartition(blockDevice); err != nil {
 			log.Fatalf("Failed to write MBR bootloader: %v", err)
 		}
+	}
+
+	// If dialog, complete it
+	if dlg != nil {
+		err = dlg.Complete()
+		if err != nil {
+			log.Fatalf("Failed to complete progress dialog: %v", err)
+		}
+		<-dlg.Done()
 	}
 }
