@@ -130,8 +130,10 @@ func flashCommand(wizard bool) {
 	// Look for prerequisites on system and change defaults accordingly
 	fsFlagStruct := flashFlagSet.Lookup("fs")
 	supportedFilesystems := []string{}
+	fullySupportedFsAvailable := false
 	if IsNTFSAvailable() {
 		supportedFilesystems = append(supportedFilesystems, "ntfs")
+		fullySupportedFsAvailable = true
 	}
 	if IsExFATAvailable() {
 		supportedFilesystems = append(supportedFilesystems, "exfat")
@@ -143,14 +145,6 @@ func flashCommand(wizard bool) {
 		fsFlagStruct.DefValue = supportedFilesystems[0]
 		fsFlagStruct.Value.Set(supportedFilesystems[0])
 		fsFlagStruct.Usage = fsFlagStruct.Usage + strings.Join(supportedFilesystems, ", ")
-	}
-	switch supportedFilesystems[0] {
-	case "exfat":
-		logWarn("Warning: NTFS support not found on this system, falling back to exFAT. " +
-			"Disks using exFAT will not boot on PCs with Secure Boot on.")
-	case "fat32":
-		logWarn("Warning: NTFS and exFAT support not found on this system, falling back to FAT32. " +
-			"Large ISOs (>4GB) will fail to flash to a FAT32 partition.")
 	}
 
 	// Parse flags
@@ -174,11 +168,15 @@ func flashCommand(wizard bool) {
 	}
 
 	// Warn about exFAT and FAT32 limitations
+	addendum := "If you encounter any issues, try installing NTFS drivers on your system (if using Linux), and using NTFS instead."
+	if fullySupportedFsAvailable {
+		addendum = "If you encounter any issues, try using NTFS instead."
+	}
 	switch *fsFlag {
 	case "exfat":
-		logWarn("Warning: Drives formatted with exFAT (--fs=exfat) will not boot on PCs with Secure Boot enabled.")
+		logWarn("%s %s", "Warning: Drives formatted with exFAT (--fs=exfat) will not boot on PCs with Secure Boot enabled.", addendum)
 	case "fat32":
-		logWarn("Warning: Using FAT32 (--fs=fat32) may cause flashing to fail for ISOs larger than 4 GB in size.")
+		logWarn("%s %s", "Warning: Using FAT32 (--fs=fat32) may cause flashing to fail for ISOs larger than 4 GB in size.", addendum)
 	}
 
 	// If using the wizard, prompt user for ISO and device
