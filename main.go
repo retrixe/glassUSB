@@ -98,11 +98,33 @@ func flashCommand(wizard bool) {
 	log.SetOutput(os.Stderr)
 	log.SetPrefix("[glassUSB] ")
 	var dlg zenity.ProgressDialog
-	logInfo := func(message string) {
+	logProgress := func(message string) {
 		log.Println(message)
 		if dlg != nil {
 			dlg.Text(message)
 		}
+	}
+	logWarn := func(format string, v ...any) {
+		log.Printf(format, v...)
+		if wizard {
+			zenity.Warning(fmt.Sprintf(format, v...),
+				zenity.Width(640),
+				zenity.WindowIcon(zenity.WarningIcon),
+				zenity.Title("glassUSB Media Creation Wizard"),
+				zenity.Icon(zenity.WarningIcon),
+				zenity.OKLabel("Continue"))
+		}
+	}
+	logFatal := func(format string, v ...any) {
+		if wizard {
+			zenity.Error(fmt.Sprintf(format, v...),
+				zenity.Width(640),
+				zenity.WindowIcon(zenity.ErrorIcon),
+				zenity.Title("glassUSB Media Creation Wizard"),
+				zenity.Icon(zenity.ErrorIcon),
+				zenity.OKLabel("Exit"))
+		}
+		log.Panicf(format, v...)
 	}
 
 	// Look for prerequisites on system and change defaults accordingly
@@ -124,11 +146,11 @@ func flashCommand(wizard bool) {
 	}
 	switch supportedFilesystems[0] {
 	case "exfat":
-		log.Println("Warning: NTFS support not found on this system, falling back to exFAT.")
-		log.Println("Warning: Disks using exFAT will not boot on PCs with Secure Boot on.")
+		logWarn("Warning: NTFS support not found on this system, falling back to exFAT. " +
+			"Disks using exFAT will not boot on PCs with Secure Boot on.")
 	case "fat32":
-		log.Println("Warning: NTFS and exFAT support not found on this system, falling back to FAT32.")
-		log.Println("Warning: Large ISOs (>4GB) will fail to flash to a FAT32 partition.")
+		logWarn("Warning: NTFS and exFAT support not found on this system, falling back to FAT32. " +
+			"Large ISOs (>4GB) will fail to flash to a FAT32 partition.")
 	}
 
 	// Parse flags
@@ -138,25 +160,25 @@ func flashCommand(wizard bool) {
 		flashFlagSet.Usage()
 		os.Exit(1)
 	} else if fsFlag == nil || (*fsFlag != "exfat" && *fsFlag != "ntfs" && *fsFlag != "fat32" && *fsFlag != "") {
-		log.Println("Invalid value provided for `-fs` flag!")
+		logFatal("Invalid value provided for `-fs` flag!")
 		flashFlagSet.Usage()
 		os.Exit(1)
 	} else if *fsFlag == "" {
-		log.Fatalln("This system does not have any filesystem drivers supported by glassUSB, exiting...")
+		logFatal("This system does not have any filesystem drivers supported by glassUSB, exiting...")
 	} else if *fsFlag == "exfat" && !slices.Contains(supportedFilesystems, "exfat") {
-		log.Fatalln("exFAT specified, but support is missing on this system, exiting...")
+		logFatal("exFAT specified, but support is missing on this system, exiting...")
 	} else if *fsFlag == "ntfs" && !slices.Contains(supportedFilesystems, "ntfs") {
-		log.Fatalln("NTFS specified, but support is missing on this system, exiting...")
+		logFatal("NTFS specified, but support is missing on this system, exiting...")
 	} else if *fsFlag == "fat32" && !slices.Contains(supportedFilesystems, "fat32") {
-		log.Fatalln("FAT32 specified, but support is missing on this system, exiting...")
+		logFatal("FAT32 specified, but support is missing on this system, exiting...")
 	}
 
 	// Warn about exFAT and FAT32 limitations
 	switch *fsFlag {
 	case "exfat":
-		log.Println("Warning: Drives formatted with exFAT (--fs=exfat) will not boot on PCs with Secure Boot enabled.")
+		logWarn("Warning: Drives formatted with exFAT (--fs=exfat) will not boot on PCs with Secure Boot enabled.")
 	case "fat32":
-		log.Println("Warning: Using FAT32 (--fs=fat32) may cause flashing to fail for ISOs larger than 4 GB in size.")
+		logWarn("Warning: Using FAT32 (--fs=fat32) may cause flashing to fail for ISOs larger than 4 GB in size.")
 	}
 
 	// If using the wizard, prompt user for ISO and device
@@ -174,18 +196,12 @@ Press 'Continue' to select the Windows ISO you downloaded. Supported versions of
 			zenity.CancelLabel("Exit"),
 			zenity.OKLabel("Continue"))
 		if err != nil {
-			log.Fatalf("Failed to continue with wizard: %v", err)
+			log.Panicf("Failed to continue with wizard: %v", err)
 		}
 
 		wd, err := os.Getwd()
 		if err != nil {
-			err = zenity.Error(fmt.Sprintf("Failed to select ISO file: %v", err),
-				zenity.Width(640),
-				zenity.WindowIcon(zenity.ErrorIcon),
-				zenity.Title("glassUSB Media Creation Wizard"),
-				zenity.Icon(zenity.ErrorIcon),
-				zenity.OKLabel("Exit"))
-			log.Fatalf("Failed to select ISO file: %v", err)
+			logFatal("Failed to open file dialog: %v", err)
 		}
 		isoPath, err := zenity.SelectFile(
 			zenity.WindowIcon(zenity.QuestionIcon),
@@ -197,26 +213,14 @@ Press 'Continue' to select the Windows ISO you downloaded. Supported versions of
 			},
 		)
 		if err != nil {
-			err = zenity.Error(fmt.Sprintf("Failed to select ISO file: %v", err),
-				zenity.Width(640),
-				zenity.WindowIcon(zenity.ErrorIcon),
-				zenity.Title("glassUSB Media Creation Wizard"),
-				zenity.Icon(zenity.ErrorIcon),
-				zenity.OKLabel("Exit"))
-			log.Fatalf("Failed to select ISO file: %v", err)
+			log.Panicf("Failed to continue with wizard: %v", err)
 		}
 
 		var device, deviceName string
 		for {
 			devices, err := imaging.GetDevices(imaging.SystemPlatform)
 			if err != nil {
-				err = zenity.Error(fmt.Sprintf("Failed to list devices: %v", err),
-					zenity.Width(640),
-					zenity.WindowIcon(zenity.ErrorIcon),
-					zenity.Title("glassUSB Media Creation Wizard"),
-					zenity.Icon(zenity.ErrorIcon),
-					zenity.OKLabel("Exit"))
-				log.Fatalf("Failed to list devices: %v", err)
+				logFatal("Failed to get connected drives: %v", err)
 			} else if len(devices) == 0 {
 				err = zenity.Error("Failed to find any USB devices connected to your computer.\n\n"+
 					"Please connect a USB flash drive and try again.",
@@ -229,7 +233,7 @@ Press 'Continue' to select the Windows ISO you downloaded. Supported versions of
 				if err == nil {
 					log.Fatalln("No USB devices connected, exiting...")
 				} else if !errors.Is(err, zenity.ErrExtraButton) {
-					log.Fatalf("Failed to list devices: %v", err)
+					log.Panicf("Failed to continue with wizard: %v", err)
 				}
 				continue
 			}
@@ -258,7 +262,7 @@ Press 'Continue' to select the Windows ISO you downloaded. Supported versions of
 			if errors.Is(err, zenity.ErrExtraButton) {
 				continue
 			} else if err != nil {
-				log.Fatalf("Failed to select target device: %v", err)
+				log.Panicf("Failed to continue with wizard: %v", err)
 			} else if device != "" {
 				deviceName = device[:strings.LastIndex(device, " (")]
 				break
@@ -282,7 +286,7 @@ The following device will be converted into a Windows installation USB drive:
 			zenity.CancelLabel("Exit"),
 			zenity.OKLabel("Continue"))
 		if err != nil {
-			log.Fatalf("Failed to continue with wizard: %v", err)
+			log.Panicf("Failed to continue with wizard: %v", err)
 		}
 
 		dlg, err = zenity.Progress(
@@ -296,7 +300,7 @@ The following device will be converted into a Windows installation USB drive:
 			zenity.CancelLabel("Cancel"),
 			zenity.OKLabel("Finish"))
 		if err != nil {
-			log.Fatalf("Failed to continue with wizard: %v", err)
+			log.Panicf("Failed to continue with wizard: %v", err)
 		}
 		defer dlg.Close()
 
@@ -318,19 +322,19 @@ The following device will be converted into a Windows installation USB drive:
 
 	// Step 1: Read ISO
 	currentPhase++
-	logInfo("Phase " + strconv.Itoa(currentPhase) + "/" + totalPhases + ": Reading ISO")
+	logProgress("Phase " + strconv.Itoa(currentPhase) + "/" + totalPhases + ": Reading ISO")
 	file, err := os.Open(args[0])
 	if err != nil {
-		log.Fatalf("Failed to open ISO: %v", err)
+		logFatal("Failed to open ISO: %v", err)
 	}
 	defer file.Close()
 	srcStat, err := file.Stat()
 	if err != nil {
-		log.Fatalf("Failed to stat ISO file: %v", err)
+		logFatal("Failed to stat ISO file: %v", err)
 	}
 	iso, err := OpenWindowsISO(file)
 	if err != nil {
-		log.Fatalf("Failed to read UDF filesystem on ISO: %v", err)
+		logFatal("Failed to read UDF filesystem on ISO: %v", err)
 	}
 	/* largeFiles := false
 	for _, f := range iso.ReadDir(nil) {
@@ -342,30 +346,30 @@ The following device will be converted into a Windows installation USB drive:
 	// Step 2: Open the block device and create a new partition table
 	blockDevice := args[1]
 	currentPhase++
-	logInfo("Phase " + strconv.Itoa(currentPhase) + "/" + totalPhases + ": Partitioning destination drive")
+	logProgress("Phase " + strconv.Itoa(currentPhase) + "/" + totalPhases + ": Partitioning destination drive")
 	destStat, err := os.Stat(blockDevice)
 	if err != nil {
-		log.Fatalf("Failed to get info about destination: %v", err)
+		logFatal("Failed to get info about destination: %v", err)
 	} else if destStat.Mode().Type()&os.ModeDevice == 0 {
 		allowRegularDest, exists := os.LookupEnv("__GLASSUSB_DEBUG_ALLOW_REGULAR_DEST")
 		if !exists || (allowRegularDest != "true" && allowRegularDest != "1") {
-			log.Fatalf("Destination %s is not a valid block device!", blockDevice)
+			logFatal("Destination %s is not a valid block device!", blockDevice)
 		}
 	}
 	blockDeviceSize, err := GetBlockDeviceSize(blockDevice)
 	if err != nil {
-		log.Fatalf("Failed to get size of destination: %v", err)
+		logFatal("Failed to get size of destination: %v", err)
 	} else if srcStat.Size() > blockDeviceSize {
 		disableSizeCheck, exists := os.LookupEnv("__GLASSUSB_DEBUG_DISABLE_SIZE_CHECK")
 		if !exists || (disableSizeCheck != "true" && disableSizeCheck != "1") {
-			log.Fatalf("Cannot write ISO to destination: ISO size (%s) is larger than device size (%s)!",
+			logFatal("Cannot write ISO to destination: ISO size (%s) is larger than device size (%s)!",
 				imaging.BytesToString(int(srcStat.Size()), true),
 				imaging.BytesToString(int(blockDeviceSize), true))
 		}
 	}
 	err = imaging.UnmountDevice(blockDevice)
 	if err != nil && err != imaging.ErrNotBlockDevice { // Ignore non-block-device error here
-		log.Fatalf("Failed to unmount destination device: %v", err)
+		logFatal("Failed to unmount destination device: %v", err)
 	}
 	if *fsFlag == "fat32" {
 		err = FormatDiskForSinglePartition(blockDevice, gptFlag != nil && *gptFlag)
@@ -373,57 +377,57 @@ The following device will be converted into a Windows installation USB drive:
 		err = FormatDiskForUEFINTFS(blockDevice, gptFlag != nil && *gptFlag)
 	}
 	if err != nil {
-		log.Fatalf("Failed to format disk: %v", err)
+		logFatal("Failed to format disk: %v", err)
 	}
 
 	// Step 3: Write UEFI:NTFS to second partition
 	if *fsFlag != "fat32" {
 		currentPhase++
-		logInfo("Phase " + strconv.Itoa(currentPhase) + "/" + totalPhases + ": Writing UEFI:NTFS bootloader")
+		logProgress("Phase " + strconv.Itoa(currentPhase) + "/" + totalPhases + ": Writing UEFI:NTFS bootloader")
 		err = WriteUEFINTFSToPartition(blockDevice, 2)
 		if err != nil {
-			log.Fatalf("Failed to write UEFI bootloader to second partition: %v", err)
+			logFatal("Failed to write UEFI bootloader to second partition: %v", err)
 		}
 	}
 
 	// Step 4: Format primary partition depending on fs flag
 	currentPhase++
-	logInfo("Phase " + strconv.Itoa(currentPhase) + "/" + totalPhases + ": Creating sources partition")
+	logProgress("Phase " + strconv.Itoa(currentPhase) + "/" + totalPhases + ": Creating sources partition")
 	primaryPartition := GetBlockDevicePartition(blockDevice, 1)
 	switch *fsFlag {
 	case "exfat":
 		if err := MakeExFAT(primaryPartition); err != nil {
-			log.Fatalf("Failed to create exFAT filesystem: %v", err)
+			logFatal("Failed to create exFAT filesystem: %v", err)
 		}
 	case "ntfs":
 		if err := MakeNTFS(primaryPartition); err != nil {
-			log.Fatalf("Failed to create NTFS filesystem: %v", err)
+			logFatal("Failed to create NTFS filesystem: %v", err)
 		}
 	case "fat32":
 		if err := MakeFAT32(primaryPartition); err != nil {
-			log.Fatalf("Failed to create FAT32 filesystem: %v", err)
+			logFatal("Failed to create FAT32 filesystem: %v", err)
 		}
 	}
 
 	// Step 5: Unpack Windows ISO contents to primary partition
 	func() {
 		currentPhase++
-		logInfo("Phase " + strconv.Itoa(currentPhase) + "/" + totalPhases + ": Extracting ISO to sources partition")
+		logProgress("Phase " + strconv.Itoa(currentPhase) + "/" + totalPhases + ": Extracting ISO to sources partition")
 		mountPoint, err := os.MkdirTemp(os.TempDir(), "glassusb-")
 		if err != nil {
-			log.Fatalf("Failed to create mount point: %v", err)
+			logFatal("Failed to create mount point: %v", err)
 		}
 		defer os.Remove(mountPoint)
 		if err := MountPartition(primaryPartition, mountPoint); err != nil {
-			log.Fatalf("Failed to mount partition: %v", err)
+			logFatal("Failed to mount partition: %v", err)
 		}
 		defer func() {
 			if err := UnmountPartition(mountPoint); err != nil {
-				log.Printf("Failed to unmount partition: %v", err)
+				logWarn("Failed to unmount partition: %v", err)
 			}
 		}()
 		if err := ExtractISOToLocation(iso, mountPoint); err != nil {
-			log.Fatalf("Failed to extract ISO contents: %v", err)
+			logFatal("Failed to extract ISO contents: %v", err)
 		}
 	}()
 
@@ -433,34 +437,34 @@ The following device will be converted into a Windows installation USB drive:
 			return
 		}
 		currentPhase++
-		logInfo("Phase " + strconv.Itoa(currentPhase) + "/" + totalPhases + ": Validating ISO contents on sources partition")
+		logProgress("Phase " + strconv.Itoa(currentPhase) + "/" + totalPhases + ": Validating ISO contents on sources partition")
 		mountPoint, err := os.MkdirTemp(os.TempDir(), "glassusb-")
 		if err != nil {
-			log.Fatalf("Failed to create mount point: %v", err)
+			logFatal("Failed to create mount point: %v", err)
 		}
 		defer os.Remove(mountPoint)
 		if err := MountPartition(primaryPartition, mountPoint); err != nil {
-			log.Fatalf("Failed to mount partition: %v", err)
+			logFatal("Failed to mount partition: %v", err)
 		}
 		defer func() {
 			if err := UnmountPartition(mountPoint); err != nil {
-				log.Printf("Failed to unmount partition: %v", err)
+				logWarn("Failed to unmount partition: %v", err)
 			}
 		}()
 		if err := ValidateISOAgainstLocation(iso, mountPoint); err != nil {
-			log.Fatalf("Failed to validate ISO contents: %v", err)
+			logFatal("Failed to validate ISO contents: %v", err)
 		}
 	}()
 
 	// Step 7: Write MBR to device for boot using `ms-sys`
 	if gptFlag == nil || !*gptFlag {
 		currentPhase++
-		logInfo("Phase " + strconv.Itoa(currentPhase) + "/" + totalPhases + ": Writing MBR bootloader")
+		logProgress("Phase " + strconv.Itoa(currentPhase) + "/" + totalPhases + ": Writing MBR bootloader")
 		if err := WriteMBRToPartition(primaryPartition); err != nil {
-			log.Fatalf("Failed to write MBR bootloader: %v", err)
+			logFatal("Failed to write MBR bootloader: %v", err)
 		}
 		if err := WriteMBRToPartition(blockDevice); err != nil {
-			log.Fatalf("Failed to write MBR bootloader: %v", err)
+			logFatal("Failed to write MBR bootloader: %v", err)
 		}
 	}
 
@@ -468,7 +472,7 @@ The following device will be converted into a Windows installation USB drive:
 	if dlg != nil {
 		err = dlg.Complete()
 		if err != nil {
-			log.Fatalf("Failed to complete progress dialog: %v", err)
+			log.Panicf("Failed to complete progress dialog: %v", err)
 		}
 		<-dlg.Done()
 	}
