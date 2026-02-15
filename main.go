@@ -334,6 +334,7 @@ The following device will be converted into a Windows installation USB drive:
 	if err != nil {
 		logFatal("Failed to read UDF filesystem on ISO: %v", err)
 	}
+	// FIXME: We also want to signal the total size back to `imprint` at some point for accuracy?
 	/* largeFiles := false
 	for _, f := range iso.ReadDir(nil) {
 		if f.Name() == "sources/install.wim" && f.Size() > 4*1024*1024*1024 {

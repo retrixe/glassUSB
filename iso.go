@@ -7,9 +7,12 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sync/atomic"
+	"time"
 
 	"github.com/Xmister/udf"
 	"github.com/diskfs/go-diskfs"
+	"github.com/retrixe/imprint/imaging"
 )
 
 var ErrInvalidWindowsISO = errors.New("this file is not recognised as a valid Windows ISO image in UDF format")
@@ -45,16 +48,36 @@ func isFileUDF(file *os.File) bool {
 	return err == nil && iso != nil && len(iso.ReadDir(nil)) > 0
 }
 
+func logProgressPerSecond(action string, progress *atomic.Int64, terminateProgress <-chan struct{}) {
+	startTime := time.Now().UnixMilli()
+	ticker := time.NewTicker(time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		// FIXME: Accept a log function because we got the zenity wizard too...
+		case <-ticker.C:
+			print(imaging.FormatProgress(int(progress.Load()), time.Now().UnixMilli()-startTime, action, false) + "\r")
+		case <-terminateProgress:
+			println(imaging.FormatProgress(int(progress.Load()), time.Now().UnixMilli()-startTime, action, true))
+			return
+		}
+	}
+}
+
 func ExtractISOToLocation(iso *udf.Udf, location string) error {
+	progress := &atomic.Int64{}
+	terminateProgress := make(chan struct{})
+	go logProgressPerSecond("extracted", progress, terminateProgress)
 	for _, file := range iso.ReadDir(nil) {
-		if err := extractISOFileToLocation(file, location); err != nil {
+		if err := extractISOFileToLocation(file, location, progress); err != nil {
 			return err
 		}
 	}
+	terminateProgress <- struct{}{}
 	return nil
 }
 
-func extractISOFileToLocation(file udf.File, location string) error {
+func extractISOFileToLocation(file udf.File, location string, progress *atomic.Int64) error {
 	if file.Name() == "install.wim" {
 		return nil // FIXME: Skip install.wim
 	}
@@ -64,7 +87,7 @@ func extractISOFileToLocation(file udf.File, location string) error {
 			return fmt.Errorf("failed to create directory %s: %w", folderPath, err)
 		}
 		for _, child := range file.ReadDir() {
-			if err := extractISOFileToLocation(child, folderPath); err != nil {
+			if err := extractISOFileToLocation(child, folderPath, progress); err != nil {
 				return err
 			}
 		}
@@ -75,7 +98,8 @@ func extractISOFileToLocation(file udf.File, location string) error {
 		}
 		defer newFile.Close()
 		buf := make([]byte, 4*1024*1024)
-		_, err = io.CopyBuffer(newFile, file.NewReader(), buf)
+		n, err := io.CopyBuffer(newFile, file.NewReader(), buf)
+		progress.Add(n) // FIXME: Break down CopyBuffer into a loop we control so we can update progress more smoothly
 		if err != nil {
 			return fmt.Errorf("failed to copy file %s: %w", file.Name(), err)
 		}
@@ -88,15 +112,19 @@ func extractISOFileToLocation(file udf.File, location string) error {
 }
 
 func ValidateISOAgainstLocation(iso *udf.Udf, location string) error {
+	progress := &atomic.Int64{}
+	terminateProgress := make(chan struct{})
+	go logProgressPerSecond("validated", progress, terminateProgress)
 	for _, file := range iso.ReadDir(nil) {
-		if err := validateISOFileAgainstLocation(file, location); err != nil {
+		if err := validateISOFileAgainstLocation(file, location, progress); err != nil {
 			return err
 		}
 	}
+	terminateProgress <- struct{}{}
 	return nil
 }
 
-func validateISOFileAgainstLocation(file udf.File, location string) error {
+func validateISOFileAgainstLocation(file udf.File, location string, progress *atomic.Int64) error {
 	if file.Name() == "install.wim" {
 		return nil // FIXME: Skip install.wim
 	}
@@ -104,7 +132,7 @@ func validateISOFileAgainstLocation(file udf.File, location string) error {
 		// TODO: Check if there's extra files in location that are not in ISO
 		folderPath := filepath.Join(location, file.Name())
 		for _, child := range file.ReadDir() {
-			if err := validateISOFileAgainstLocation(child, folderPath); err != nil {
+			if err := validateISOFileAgainstLocation(child, folderPath, progress); err != nil {
 				return err
 			}
 		}
@@ -129,6 +157,7 @@ func validateISOFileAgainstLocation(file udf.File, location string) error {
 			if !bytes.Equal(buf1[:n1], buf2[:n2]) {
 				return fmt.Errorf("contents of file %s do not match the ISO", file.Name())
 			}
+			progress.Add(int64(n1))
 			if err1 == io.EOF {
 				break
 			}
