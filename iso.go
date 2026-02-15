@@ -48,6 +48,30 @@ func isFileUDF(file *os.File) bool {
 	return err == nil && iso != nil && len(iso.ReadDir(nil)) > 0
 }
 
+func GetISOContentSize(iso *udf.Udf) int64 {
+	size := int64(0)
+	for _, file := range iso.ReadDir(nil) {
+		if file.IsDir() {
+			size += getISOFileFolderSize(file)
+		} else {
+			size += file.Size()
+		}
+	}
+	return size
+}
+
+func getISOFileFolderSize(folder udf.File) int64 {
+	var size int64 = 0
+	for _, f := range folder.ReadDir() {
+		if f.IsDir() {
+			size += getISOFileFolderSize(f)
+		} else {
+			size += f.Size()
+		}
+	}
+	return size
+}
+
 func logProgressPerSecond(action string, progress *atomic.Int64, terminateProgress <-chan struct{}) {
 	startTime := time.Now().UnixMilli()
 	ticker := time.NewTicker(time.Second)
