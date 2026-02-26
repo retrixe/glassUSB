@@ -36,10 +36,10 @@ var gptFlag = flashFlagSet.Bool("gpt", false,
 		"Note: Only compatible with UEFI systems i.e. PCs with Windows 8 or newer")
 var fsFlag = flashFlagSet.String("fs", "",
 	"Filesystem to use for storing the USB flash drive contents.\n"+
-		"\nIf using NTFS or exFAT, UEFI:NTFS will be installed to the EFI system partition,\n"+
+		"\nIf using NTFS or exFAT, UEFI:NTFS will be installed to an EFI system partition,\n"+
 		"and all ISO files will be placed on the NTFS/exFAT partition.\n"+
 		"Note: Drives formatted with exFAT will not boot on PCs with Secure Boot enabled.\n"+
-		"\nIf using FAT32, all ISO files will be placed on the EFI system partition. If\n"+
+		"\nIf using FAT32, all ISO files will be placed on a FAT32 EFI system partition. If\n"+
 		"'sources/install.wim' is larger than 4 GB, the flash procedure will fail.\n"+
 		//"\nIf using FAT32, all ISO files will be placed on the EFI system partition, If\n"+
 		//"'sources/install.wim' is larger than 4 GB, a second NTFS/exFAT partition will be\n"+
