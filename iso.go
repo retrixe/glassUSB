@@ -121,8 +121,38 @@ func extractISOFileToLocation(file udf.File, location string, progress *atomic.I
 		}
 		defer newFile.Close()
 		buf := make([]byte, 4*1024*1024)
-		n, err := io.CopyBuffer(newFile, file.NewReader(), buf)
-		progress.Add(n) // FIXME: Break down CopyBuffer into a loop we control so we can update progress more smoothly
+		src := file.NewReader()
+		dst := newFile
+		// Extracted from io.CopyBuffer
+		// errInvalidWrite means that a write returned an impossible count.
+		var errInvalidWrite = errors.New("invalid write result")
+		for {
+			nr, er := src.Read(buf)
+			if nr > 0 {
+				nw, ew := dst.Write(buf[0:nr])
+				if nw < 0 || nr < nw {
+					nw = 0
+					if ew == nil {
+						ew = errInvalidWrite
+					}
+				}
+				progress.Add(int64(nw))
+				if ew != nil {
+					err = ew
+					break
+				}
+				if nr != nw {
+					err = io.ErrShortWrite
+					break
+				}
+			}
+			if er != nil {
+				if er != io.EOF {
+					err = er
+				}
+				break
+			}
+		}
 		if err != nil {
 			return fmt.Errorf("failed to copy file %s: %w", file.Name(), err)
 		}
