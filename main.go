@@ -408,7 +408,8 @@ The following device will be converted into a Windows installation USB drive:
 	// Step 5: Unpack Windows ISO contents to primary partition
 	if err = func() error {
 		currentPhase++
-		logProgress("Phase " + strconv.Itoa(currentPhase) + "/" + totalPhases + ": Extracting ISO to sources partition")
+		progStr := "Phase " + strconv.Itoa(currentPhase) + "/" + totalPhases + ": Extracting ISO to sources partition"
+		logProgress(progStr)
 		mountPoint, err := os.MkdirTemp(os.TempDir(), "glassusb-")
 		if err != nil {
 			return logError("failed to create mount point: %w", err)
@@ -422,7 +423,13 @@ The following device will be converted into a Windows installation USB drive:
 				logWarn("Failed to unmount partition: %v", err)
 			}
 		}()
-		if err := ExtractISOToLocation(iso, mountPoint); err != nil {
+		logFn := func(log string) {
+			print(log)
+			if dlg != nil {
+				dlg.Text(progStr + "\n" + strings.TrimSpace(log))
+			}
+		}
+		if err := ExtractISOToLocation(logFn, iso, mountPoint); err != nil {
 			return logError("failed to extract ISO contents: %w", err)
 		}
 		return nil
@@ -436,7 +443,8 @@ The following device will be converted into a Windows installation USB drive:
 			return nil
 		}
 		currentPhase++
-		logProgress("Phase " + strconv.Itoa(currentPhase) + "/" + totalPhases + ": Validating ISO contents on sources partition")
+		progStr := "Phase " + strconv.Itoa(currentPhase) + "/" + totalPhases + ": Validating ISO contents on sources partition"
+		logProgress(progStr)
 		mountPoint, err := os.MkdirTemp(os.TempDir(), "glassusb-")
 		if err != nil {
 			return logError("failed to create mount point: %w", err)
@@ -450,7 +458,13 @@ The following device will be converted into a Windows installation USB drive:
 				logWarn("Failed to unmount partition: %v", err)
 			}
 		}()
-		if err := ValidateISOAgainstLocation(iso, mountPoint); err != nil {
+		logFn := func(log string) {
+			print(log)
+			if dlg != nil {
+				dlg.Text(progStr + "\n" + strings.TrimSpace(log))
+			}
+		}
+		if err := ValidateISOAgainstLocation(logFn, iso, mountPoint); err != nil {
 			return logError("failed to validate ISO contents: %w", err)
 		}
 		return nil

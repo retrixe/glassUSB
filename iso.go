@@ -72,26 +72,25 @@ func getISOFileFolderSize(folder udf.File) int64 {
 	return size
 }
 
-func logProgressPerSecond(action string, progress *atomic.Int64, terminateProgress <-chan struct{}) {
+func logProgressPerSecond(logFn func(string), action string, progress *atomic.Int64, terminateProgress <-chan struct{}) {
 	startTime := time.Now().UnixMilli()
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
 	for {
 		select {
-		// FIXME: Accept a log function because we got the zenity wizard too...
 		case <-ticker.C:
-			print(imaging.FormatProgress(int(progress.Load()), time.Now().UnixMilli()-startTime, action, false) + "\r")
+			logFn(imaging.FormatProgress(int(progress.Load()), time.Now().UnixMilli()-startTime, action, false) + "\r")
 		case <-terminateProgress:
-			println(imaging.FormatProgress(int(progress.Load()), time.Now().UnixMilli()-startTime, action, true))
+			logFn(imaging.FormatProgress(int(progress.Load()), time.Now().UnixMilli()-startTime, action, true) + "\n")
 			return
 		}
 	}
 }
 
-func ExtractISOToLocation(iso *udf.Udf, location string) error {
+func ExtractISOToLocation(logFn func(string), iso *udf.Udf, location string) error {
 	progress := &atomic.Int64{}
 	terminateProgress := make(chan struct{})
-	go logProgressPerSecond("extracted", progress, terminateProgress)
+	go logProgressPerSecond(logFn, "extracted", progress, terminateProgress)
 	for _, file := range iso.ReadDir(nil) {
 		if err := extractISOFileToLocation(file, location, progress); err != nil {
 			return err
@@ -135,10 +134,10 @@ func extractISOFileToLocation(file udf.File, location string, progress *atomic.I
 	return nil
 }
 
-func ValidateISOAgainstLocation(iso *udf.Udf, location string) error {
+func ValidateISOAgainstLocation(logFn func(string), iso *udf.Udf, location string) error {
 	progress := &atomic.Int64{}
 	terminateProgress := make(chan struct{})
-	go logProgressPerSecond("validated", progress, terminateProgress)
+	go logProgressPerSecond(logFn, "validated", progress, terminateProgress)
 	for _, file := range iso.ReadDir(nil) {
 		if err := validateISOFileAgainstLocation(file, location, progress); err != nil {
 			return err
