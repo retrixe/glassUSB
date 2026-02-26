@@ -167,6 +167,8 @@ func flashCommand(wizard bool) error {
 	} else if !slices.Contains(supportedFilesystems, *fsFlag) {
 		return logError("this system does not have drivers for the specified filesystem (%s), exiting...", *fsFlag)
 	}
+	debugBypassChecksEnv := os.Getenv("__GLASSUSB_DEBUG_BYPASS_CHECKS")
+	debugBypassChecks := debugBypassChecksEnv == "true" || debugBypassChecksEnv == "1"
 
 	// Warn about exFAT and FAT32 limitations
 	addendum := "If you encounter any issues, try installing NTFS drivers on your system (if using Linux), and using NTFS instead."
@@ -347,8 +349,7 @@ The following device will be converted into a Windows installation USB drive:
 	if err != nil {
 		return logError("failed to get info about destination: %w", err)
 	} else if destStat.Mode().Type()&os.ModeDevice == 0 {
-		allowRegularDest, exists := os.LookupEnv("__GLASSUSB_DEBUG_ALLOW_REGULAR_DEST")
-		if !exists || (allowRegularDest != "true" && allowRegularDest != "1") {
+		if !debugBypassChecks {
 			return logError("destination %s is not a valid block device!", blockDevice)
 		}
 	}
@@ -356,8 +357,7 @@ The following device will be converted into a Windows installation USB drive:
 	if err != nil {
 		return logError("failed to get size of destination: %w", err)
 	} else if srcStat.Size() > blockDeviceSize {
-		disableSizeCheck, exists := os.LookupEnv("__GLASSUSB_DEBUG_DISABLE_SIZE_CHECK")
-		if !exists || (disableSizeCheck != "true" && disableSizeCheck != "1") {
+		if !debugBypassChecks {
 			return logError("cannot write ISO to destination: ISO size (%s) is larger than device size (%s)!",
 				imaging.BytesToString(int(srcStat.Size()), true),
 				imaging.BytesToString(int(blockDeviceSize), true))
@@ -486,6 +486,10 @@ The following device will be converted into a Windows installation USB drive:
 
 	// If dialog, complete it
 	if dlg != nil {
+		err = dlg.Text("The flash process completed successfully! You can now boot from this USB to install Windows.")
+		if err != nil {
+			return fmt.Errorf("failed to complete progress dialog: %w", err)
+		}
 		err = dlg.Complete()
 		if err != nil {
 			return fmt.Errorf("failed to complete progress dialog: %w", err)
