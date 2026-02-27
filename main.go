@@ -25,7 +25,7 @@ func mainUsage() {
 	println("Usage: glassUSB [command] [options]")
 	println("\nAvailable commands:")
 	println("  flash       Flash a Windows ISO to a specific USB device.")
-	println("  wizard      Start the GUI wizard for flashing Windows ISOs to a USB device.")
+	println("  wizard      (Beta) Start a GUI wizard for flashing Windows ISOs to a USB device.")
 	println("\nOptions:")
 	flag.PrintDefaults()
 }
