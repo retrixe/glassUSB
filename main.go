@@ -1,14 +1,17 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"flag"
 	"fmt"
 	"log"
 	"os"
+	"os/signal"
 	"slices"
 	"strconv"
 	"strings"
+	"syscall"
 
 	_ "embed"
 
@@ -320,6 +323,9 @@ The following device will be converted into a Windows installation USB drive:
 	}
 	totalPhases := strconv.Itoa(totalPhasesNum)
 	currentPhase := 0
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt,
+		syscall.SIGTERM, syscall.SIGINT, syscall.SIGHUP)
+	defer cancel()
 
 	// Step 1: Read ISO
 	currentPhase++
@@ -340,6 +346,9 @@ The following device will be converted into a Windows installation USB drive:
 	//totalSize := GetISOContentSize(iso)
 	//log.Println("Total ISO size:", strconv.Itoa(int(totalSize)), "bytes",
 	//	"("+imaging.BytesToString(int(totalSize), false)+", "+imaging.BytesToString(int(totalSize), true)+")")
+	if ctx.Err() != nil {
+		return logError("operation cancelled")
+	}
 
 	// Step 2: Open the block device and create a new partition table
 	blockDevice := args[1]
@@ -367,6 +376,9 @@ The following device will be converted into a Windows installation USB drive:
 	if err != nil && err != imaging.ErrNotBlockDevice { // Ignore non-block-device error here
 		return logError("failed to unmount destination device: %w", err)
 	}
+	if ctx.Err() != nil {
+		return logError("operation cancelled")
+	}
 	if *fsFlag == "fat32" {
 		err = FormatDiskForSinglePartition(blockDevice, gptFlag != nil && *gptFlag)
 	} else {
@@ -374,6 +386,9 @@ The following device will be converted into a Windows installation USB drive:
 	}
 	if err != nil {
 		return logError("failed to format disk: %w", err)
+	}
+	if ctx.Err() != nil {
+		return logError("operation cancelled")
 	}
 
 	// Step 3: Write UEFI:NTFS to second partition
@@ -383,6 +398,9 @@ The following device will be converted into a Windows installation USB drive:
 		err = WriteUEFINTFSToPartition(blockDevice, 2)
 		if err != nil {
 			return logError("failed to write UEFI bootloader to second partition: %w", err)
+		}
+		if ctx.Err() != nil {
+			return logError("operation cancelled")
 		}
 	}
 
@@ -404,8 +422,12 @@ The following device will be converted into a Windows installation USB drive:
 			return logError("failed to create FAT32 filesystem: %w", err)
 		}
 	}
+	if ctx.Err() != nil {
+		return logError("operation cancelled")
+	}
 
 	// Step 5: Unpack Windows ISO contents to primary partition
+	// FIXME: Wire cancellation into the extraction function
 	if err = func() error {
 		currentPhase++
 		progStr := "Phase " + strconv.Itoa(currentPhase) + "/" + totalPhases + ": Extracting ISO to sources partition"
@@ -438,6 +460,7 @@ The following device will be converted into a Windows installation USB drive:
 	}
 
 	// Step 6: Validate Windows ISO contents on primary partition
+	// FIXME: Wire cancellation into the extraction function
 	if err = func() error {
 		if *skipValidationFlag {
 			return nil
@@ -483,13 +506,11 @@ The following device will be converted into a Windows installation USB drive:
 			return logError("failed to write MBR bootloader: %w", err)
 		}
 	}
+	signal.Reset(os.Interrupt, syscall.SIGTERM, syscall.SIGINT, syscall.SIGHUP)
 
 	// If dialog, complete it
+	logProgress("The flash process completed successfully! You can now boot from this USB to install Windows.")
 	if dlg != nil {
-		err = dlg.Text("The flash process completed successfully! You can now boot from this USB to install Windows.")
-		if err != nil {
-			return fmt.Errorf("failed to complete progress dialog: %w", err)
-		}
 		err = dlg.Complete()
 		if err != nil {
 			return fmt.Errorf("failed to complete progress dialog: %w", err)
