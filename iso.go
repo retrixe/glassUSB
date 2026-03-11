@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -87,20 +88,22 @@ func logProgressPerSecond(logFn func(string), action string, progress *atomic.In
 	}
 }
 
-func ExtractISOToLocation(logFn func(string), iso *udf.Udf, location string) error {
+func ExtractISOToLocation(ctx context.Context, logFn func(string), iso *udf.Udf, location string) error {
 	progress := &atomic.Int64{}
 	terminateProgress := make(chan struct{})
 	go logProgressPerSecond(logFn, "extracted", progress, terminateProgress)
 	for _, file := range iso.ReadDir(nil) {
-		if err := extractISOFileToLocation(file, location, progress); err != nil {
+		if err := extractISOFileToLocation(ctx, file, location, progress); err != nil {
 			return err
+		} else if ctx.Err() != nil {
+			return fmt.Errorf("operation cancelled")
 		}
 	}
 	terminateProgress <- struct{}{}
 	return nil
 }
 
-func extractISOFileToLocation(file udf.File, location string, progress *atomic.Int64) error {
+func extractISOFileToLocation(ctx context.Context, file udf.File, location string, progress *atomic.Int64) error {
 	if file.Name() == "install.wim" {
 		return nil // FIXME: Skip install.wim
 	}
@@ -110,8 +113,10 @@ func extractISOFileToLocation(file udf.File, location string, progress *atomic.I
 			return fmt.Errorf("failed to create directory %s: %w", folderPath, err)
 		}
 		for _, child := range file.ReadDir() {
-			if err := extractISOFileToLocation(child, folderPath, progress); err != nil {
+			if err := extractISOFileToLocation(ctx, child, folderPath, progress); err != nil {
 				return err
+			} else if ctx.Err() != nil {
+				return fmt.Errorf("operation cancelled")
 			}
 		}
 	} else {
@@ -127,6 +132,9 @@ func extractISOFileToLocation(file udf.File, location string, progress *atomic.I
 		// errInvalidWrite means that a write returned an impossible count.
 		var errInvalidWrite = errors.New("invalid write result")
 		for {
+			if ctx.Err() != nil {
+				return fmt.Errorf("operation cancelled") // Modified from io.CopyBuffer to support cancellation
+			}
 			nr, er := src.Read(buf)
 			if nr > 0 {
 				nw, ew := dst.Write(buf[0:nr])
@@ -136,7 +144,7 @@ func extractISOFileToLocation(file udf.File, location string, progress *atomic.I
 						ew = errInvalidWrite
 					}
 				}
-				progress.Add(int64(nw))
+				progress.Add(int64(nw)) // Modified from io.CopyBuffer to track progress
 				if ew != nil {
 					err = ew
 					break
@@ -164,20 +172,22 @@ func extractISOFileToLocation(file udf.File, location string, progress *atomic.I
 	return nil
 }
 
-func ValidateISOAgainstLocation(logFn func(string), iso *udf.Udf, location string) error {
+func ValidateISOAgainstLocation(ctx context.Context, logFn func(string), iso *udf.Udf, location string) error {
 	progress := &atomic.Int64{}
 	terminateProgress := make(chan struct{})
 	go logProgressPerSecond(logFn, "validated", progress, terminateProgress)
 	for _, file := range iso.ReadDir(nil) {
-		if err := validateISOFileAgainstLocation(file, location, progress); err != nil {
+		if err := validateISOFileAgainstLocation(ctx, file, location, progress); err != nil {
 			return err
+		} else if ctx.Err() != nil {
+			return fmt.Errorf("operation cancelled")
 		}
 	}
 	terminateProgress <- struct{}{}
 	return nil
 }
 
-func validateISOFileAgainstLocation(file udf.File, location string, progress *atomic.Int64) error {
+func validateISOFileAgainstLocation(ctx context.Context, file udf.File, location string, progress *atomic.Int64) error {
 	if file.Name() == "install.wim" {
 		return nil // FIXME: Skip install.wim
 	}
@@ -185,8 +195,10 @@ func validateISOFileAgainstLocation(file udf.File, location string, progress *at
 		// TODO: Check if there's extra files in location that are not in ISO
 		folderPath := filepath.Join(location, file.Name())
 		for _, child := range file.ReadDir() {
-			if err := validateISOFileAgainstLocation(child, folderPath, progress); err != nil {
+			if err := validateISOFileAgainstLocation(ctx, child, folderPath, progress); err != nil {
 				return err
+			} else if ctx.Err() != nil {
+				return fmt.Errorf("operation cancelled")
 			}
 		}
 	} else {
@@ -199,6 +211,9 @@ func validateISOFileAgainstLocation(file udf.File, location string, progress *at
 		buf1 := make([]byte, 4*1024*1024)
 		buf2 := make([]byte, 4*1024*1024)
 		for {
+			if ctx.Err() != nil {
+				return fmt.Errorf("operation cancelled")
+			}
 			n1, err1 := srcReader.Read(buf1)
 			if err1 != nil && err1 != io.EOF {
 				return fmt.Errorf("failed to read file %s from ISO: %w", file.Name(), err1)

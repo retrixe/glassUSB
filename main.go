@@ -427,7 +427,6 @@ The following device will be converted into a Windows installation USB drive:
 	}
 
 	// Step 5: Unpack Windows ISO contents to primary partition
-	// FIXME: Wire cancellation into the extraction function
 	if err = func() error {
 		currentPhase++
 		progStr := "Phase " + strconv.Itoa(currentPhase) + "/" + totalPhases + ": Extracting ISO to sources partition"
@@ -445,13 +444,16 @@ The following device will be converted into a Windows installation USB drive:
 				logWarn("Failed to unmount partition: %v", err)
 			}
 		}()
+		if ctx.Err() != nil {
+			return logError("operation cancelled")
+		}
 		logFn := func(log string) {
 			print(log)
 			if dlg != nil {
 				dlg.Text(progStr + "\n" + strings.TrimSpace(log))
 			}
 		}
-		if err := ExtractISOToLocation(logFn, iso, mountPoint); err != nil {
+		if err := ExtractISOToLocation(ctx, logFn, iso, mountPoint); err != nil {
 			return logError("failed to extract ISO contents: %w", err)
 		}
 		return nil
@@ -460,7 +462,6 @@ The following device will be converted into a Windows installation USB drive:
 	}
 
 	// Step 6: Validate Windows ISO contents on primary partition
-	// FIXME: Wire cancellation into the extraction function
 	if err = func() error {
 		if *skipValidationFlag {
 			return nil
@@ -481,13 +482,16 @@ The following device will be converted into a Windows installation USB drive:
 				logWarn("Failed to unmount partition: %v", err)
 			}
 		}()
+		if ctx.Err() != nil {
+			return logError("operation cancelled")
+		}
 		logFn := func(log string) {
 			print(log)
 			if dlg != nil {
 				dlg.Text(progStr + "\n" + strings.TrimSpace(log))
 			}
 		}
-		if err := ValidateISOAgainstLocation(logFn, iso, mountPoint); err != nil {
+		if err := ValidateISOAgainstLocation(ctx, logFn, iso, mountPoint); err != nil {
 			return logError("failed to validate ISO contents: %w", err)
 		}
 		return nil
