@@ -177,6 +177,12 @@ func ValidateISOAgainstLocation(ctx context.Context, logFn func(string), iso *ud
 	progressCtx, cancelProgress := context.WithCancel(ctx)
 	defer cancelProgress()
 	go logProgressPerSecond(progressCtx, logFn, "validated", progress)
+
+	// Eschew checking for extra files at the top level, since OSes like macOS and Windows will just
+	// create garbage like .DS_Store and 'System Volume Information' folders (typically at the root).
+	//
+	// This check is mostly there for sanity, I don't think we really need it either as long as the
+	// the ISO files are all in correct order.
 	for _, file := range iso.ReadDir(nil) {
 		if err := validateISOFileAgainstLocation(ctx, file, location, progress); err != nil {
 			return err
@@ -192,13 +198,24 @@ func validateISOFileAgainstLocation(ctx context.Context, file udf.File, location
 		return nil // FIXME: Skip install.wim
 	}
 	if file.IsDir() {
-		// FIXME: Check if there's extra files in location that are not in ISO
 		folderPath := filepath.Join(location, file.Name())
+		validNames := make(map[string]struct{})
 		for _, child := range file.ReadDir() {
+			validNames[child.Name()] = struct{}{}
 			if err := validateISOFileAgainstLocation(ctx, child, folderPath, progress); err != nil {
 				return err
 			} else if ctx.Err() != nil {
 				return fmt.Errorf("operation cancelled")
+			}
+		}
+		// Check if there's extra files in location that are not in ISO
+		contents, err := os.ReadDir(folderPath)
+		if err != nil {
+			return fmt.Errorf("failed to read directory %s: %w", folderPath, err)
+		}
+		for _, entry := range contents {
+			if _, ok := validNames[entry.Name()]; !ok {
+				return fmt.Errorf("extra file %s found in directory %s that is not in the ISO", entry.Name(), folderPath)
 			}
 		}
 	} else {
