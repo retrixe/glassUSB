@@ -73,7 +73,7 @@ func getISOFileFolderSize(folder udf.File) int64 {
 	return size
 }
 
-func logProgressPerSecond(logFn func(string), action string, progress *atomic.Int64, terminateProgress <-chan struct{}) {
+func logProgressPerSecond(ctx context.Context, logFn func(string), action string, progress *atomic.Int64) {
 	startTime := time.Now().UnixMilli()
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
@@ -81,7 +81,7 @@ func logProgressPerSecond(logFn func(string), action string, progress *atomic.In
 		select {
 		case <-ticker.C:
 			logFn(imaging.FormatProgress(int(progress.Load()), time.Now().UnixMilli()-startTime, action, false) + "\r")
-		case <-terminateProgress:
+		case <-ctx.Done():
 			logFn(imaging.FormatProgress(int(progress.Load()), time.Now().UnixMilli()-startTime, action, true) + "\n")
 			return
 		}
@@ -90,8 +90,9 @@ func logProgressPerSecond(logFn func(string), action string, progress *atomic.In
 
 func ExtractISOToLocation(ctx context.Context, logFn func(string), iso *udf.Udf, location string) error {
 	progress := &atomic.Int64{}
-	terminateProgress := make(chan struct{})
-	go logProgressPerSecond(logFn, "extracted", progress, terminateProgress)
+	progressCtx, cancelProgress := context.WithCancel(ctx)
+	defer cancelProgress()
+	go logProgressPerSecond(progressCtx, logFn, "extracted", progress)
 	for _, file := range iso.ReadDir(nil) {
 		if err := extractISOFileToLocation(ctx, file, location, progress); err != nil {
 			return err
@@ -99,7 +100,6 @@ func ExtractISOToLocation(ctx context.Context, logFn func(string), iso *udf.Udf,
 			return fmt.Errorf("operation cancelled")
 		}
 	}
-	terminateProgress <- struct{}{}
 	return nil
 }
 
@@ -174,8 +174,9 @@ func extractISOFileToLocation(ctx context.Context, file udf.File, location strin
 
 func ValidateISOAgainstLocation(ctx context.Context, logFn func(string), iso *udf.Udf, location string) error {
 	progress := &atomic.Int64{}
-	terminateProgress := make(chan struct{})
-	go logProgressPerSecond(logFn, "validated", progress, terminateProgress)
+	progressCtx, cancelProgress := context.WithCancel(ctx)
+	defer cancelProgress()
+	go logProgressPerSecond(progressCtx, logFn, "validated", progress)
 	for _, file := range iso.ReadDir(nil) {
 		if err := validateISOFileAgainstLocation(ctx, file, location, progress); err != nil {
 			return err
@@ -183,7 +184,6 @@ func ValidateISOAgainstLocation(ctx context.Context, logFn func(string), iso *ud
 			return fmt.Errorf("operation cancelled")
 		}
 	}
-	terminateProgress <- struct{}{}
 	return nil
 }
 
