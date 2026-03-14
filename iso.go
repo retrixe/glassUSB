@@ -192,7 +192,7 @@ func validateISOFileAgainstLocation(ctx context.Context, file udf.File, location
 		return nil // FIXME: Skip install.wim
 	}
 	if file.IsDir() {
-		// TODO: Check if there's extra files in location that are not in ISO
+		// FIXME: Check if there's extra files in location that are not in ISO
 		folderPath := filepath.Join(location, file.Name())
 		for _, child := range file.ReadDir() {
 			if err := validateISOFileAgainstLocation(ctx, child, folderPath, progress); err != nil {

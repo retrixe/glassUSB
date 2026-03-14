@@ -300,7 +300,7 @@ The following device will be converted into a Windows installation USB drive:
 			zenity.Icon(zenity.NoIcon),
 			zenity.Pulsate(),
 			// TODO: Could we use TimeRemaining at the flash stage
-			zenity.NoCancel(), // TODO: Once cancellation is implemented we ball
+			zenity.NoCancel(), // FIXME: Once cancellation is implemented we ball
 			zenity.CancelLabel("Cancel"),
 			zenity.OKLabel("Finish"))
 		if err != nil {
