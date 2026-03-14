@@ -8,6 +8,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"runtime"
 	"slices"
 	"strconv"
 	"strings"
@@ -455,7 +456,11 @@ The following device will be converted into a Windows installation USB drive:
 		logFn := func(log string) {
 			print(log)
 			if dlg != nil {
-				dlg.Text(progStr + "\n" + strings.TrimSpace(log))
+				separator := "\n"
+				if runtime.GOOS != "windows" && runtime.GOOS != "darwin" { // TODO: Test macOS line break handling
+					separator = "\\n" // Hack: Replace newlines with literal \n for zenity on Linux, which seems to not handle newlines in progress dialog text properly
+				}
+				dlg.Text(progStr + separator + strings.TrimSpace(log))
 			}
 		}
 		if err := ExtractISOToLocation(ctx, logFn, iso, mountPoint); err != nil {
@@ -493,7 +498,11 @@ The following device will be converted into a Windows installation USB drive:
 		logFn := func(log string) {
 			print(log)
 			if dlg != nil {
-				dlg.Text(progStr + "\n" + strings.TrimSpace(log))
+				separator := "\n"
+				if runtime.GOOS != "windows" && runtime.GOOS != "darwin" { // TODO: Test macOS line break handling
+					separator = "\\n" // Hack: Replace newlines with literal \n for zenity on Linux, which seems to not handle newlines in progress dialog text properly
+				}
+				dlg.Text(progStr + separator + strings.TrimSpace(log))
 			}
 		}
 		if err := ValidateISOAgainstLocation(ctx, logFn, iso, mountPoint); err != nil {
