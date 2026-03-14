@@ -300,7 +300,6 @@ The following device will be converted into a Windows installation USB drive:
 			zenity.Icon(zenity.NoIcon),
 			zenity.Pulsate(),
 			// TODO: Could we use TimeRemaining at the flash stage
-			zenity.NoCancel(), // FIXME: Once cancellation is implemented we ball
 			zenity.CancelLabel("Cancel"),
 			zenity.OKLabel("Finish"))
 		if err != nil {
@@ -326,6 +325,12 @@ The following device will be converted into a Windows installation USB drive:
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt,
 		syscall.SIGTERM, syscall.SIGINT, syscall.SIGHUP)
 	defer cancel()
+	go func() {
+		if dlg != nil {
+			<-dlg.Done()
+			cancel()
+		}
+	}()
 
 	// Step 1: Read ISO
 	currentPhase++
@@ -519,7 +524,7 @@ The following device will be converted into a Windows installation USB drive:
 		if err != nil {
 			return fmt.Errorf("failed to complete progress dialog: %w", err)
 		}
-		<-dlg.Done()
+		<-ctx.Done() // The context will be cancelled when dlg.Done() by the goroutine fired earlier
 	}
 	return nil
 }
