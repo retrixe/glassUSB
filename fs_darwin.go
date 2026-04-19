@@ -1,4 +1,4 @@
-//go:build linux
+//go:build darwin
 
 package main
 
@@ -8,37 +8,36 @@ import (
 )
 
 func IsFAT32Available() bool {
-	_, err := exec.LookPath("mkfs.vfat")
+	_, err := exec.LookPath("newfs_msdos")
 	return err == nil
 }
 
 func MakeFAT32(device string) error {
-	if out, err := exec.Command("mkfs.vfat", "-F", "32", device).CombinedOutput(); err != nil {
+	if out, err := exec.Command("newfs_msdos", "-F", "32", device).CombinedOutput(); err != nil {
 		return fmt.Errorf("failed to create FAT32 filesystem: %w\noutput: %s", err, out)
 	}
 	return nil
 }
 
 func IsExFATAvailable() bool {
-	_, err := exec.LookPath("mkfs.exfat")
+	_, err := exec.LookPath("newfs_exfat")
 	return err == nil
 }
 
 func MakeExFAT(device string) error {
-	if out, err := exec.Command("mkfs.exfat", device).CombinedOutput(); err != nil {
+	if out, err := exec.Command("newfs_exfat", device).CombinedOutput(); err != nil {
 		return fmt.Errorf("failed to create exFAT filesystem: %w\noutput: %s", err, out)
 	}
 	return nil
 }
 
 func IsNTFSAvailable() bool {
-	_, err := exec.LookPath("mkfs.ntfs")
+	_, err := exec.LookPath("newfs_ntfs") // Provided by "Paragon NTFS for Mac OS X"
 	return err == nil
 }
 
 func MakeNTFS(device string) error {
-	// TODO: These are ntfs-3g specific parameters, update when ntfsplus is a thing
-	if out, err := exec.Command("mkfs.ntfs", "-Q", "-v", device).CombinedOutput(); err != nil {
+	if out, err := exec.Command("newfs_ntfs", "-q", device).CombinedOutput(); err != nil {
 		return fmt.Errorf("failed to create NTFS filesystem: %w\noutput: %s", err, out)
 	}
 	return nil

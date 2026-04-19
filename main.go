@@ -175,7 +175,7 @@ func flashCommand(wizard bool) error {
 	debugBypassChecks := debugBypassChecksEnv == "true" || debugBypassChecksEnv == "1"
 
 	// Warn about exFAT and FAT32 limitations
-	addendum := "If you encounter any issues, try installing NTFS drivers on your system (if using Linux), and using NTFS instead."
+	addendum := "If you encounter any issues, try installing NTFS drivers on your system (Paragon NTFS for macOS, ntfs-3g for Linux)."
 	if fullySupportedFsAvailable {
 		addendum = "If you encounter any issues, try using NTFS instead."
 	}
