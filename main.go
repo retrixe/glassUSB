@@ -227,14 +227,24 @@ Press 'Continue' to select the Windows ISO you downloaded. Supported versions of
 			if err != nil {
 				return logError("failed to get connected drives: %w", err)
 			} else if len(devices) == 0 {
-				err = zenity.Error("Failed to find any USB devices connected to your computer.\n\n"+
-					"Please connect a USB flash drive and try again.",
-					zenity.Width(640),
-					zenity.WindowIcon(zenity.ErrorIcon),
-					zenity.Title("glassUSB - Select target USB drive"),
-					zenity.Icon(zenity.ErrorIcon),
-					zenity.OKLabel("Exit"),
-					zenity.ExtraButton("Rescan devices"))
+				if runtime.GOOS == "linux" { // No extra button on Windows/macOS
+					err = zenity.Error("Failed to find any USB devices connected to your computer.\n\n"+
+						"Please connect a USB flash drive and try again.",
+						zenity.Width(640),
+						zenity.WindowIcon(zenity.ErrorIcon),
+						zenity.Title("glassUSB - Select target USB drive"),
+						zenity.Icon(zenity.ErrorIcon),
+						zenity.OKLabel("Exit"),
+						zenity.ExtraButton("Rescan devices"))
+				} else {
+					err = zenity.Error("Failed to find any USB devices connected to your computer.\n\n"+
+						"Please connect a USB flash drive and try again.",
+						zenity.Width(640),
+						zenity.WindowIcon(zenity.ErrorIcon),
+						zenity.Title("glassUSB - Select target USB drive"),
+						zenity.Icon(zenity.ErrorIcon),
+						zenity.OKLabel("Exit"))
+				}
 				if err == nil {
 					return fmt.Errorf("no USB devices connected, exiting...")
 				} else if !errors.Is(err, zenity.ErrExtraButton) {
@@ -251,19 +261,34 @@ Press 'Continue' to select the Windows ISO you downloaded. Supported versions of
 					stringifiedDevices[index] = device.Name + " (" + device.Model + ", " + device.Size + ")"
 				}
 			}
-			device, err = zenity.List("Select a target device to flash the Windows ISO to:\n\n"+
-				"⚠️ Warning: All data on the USB drive you select will be ERASED!\n"+
-				"If you have any files stored on the drive, back them up before proceeding!",
-				stringifiedDevices,
-				zenity.Width(640),
-				zenity.Height(480),
-				zenity.WindowIcon(zenity.QuestionIcon),
-				zenity.Title("glassUSB - Select target USB drive"),
-				zenity.DisallowEmpty(),
-				zenity.RadioList(),
-				zenity.OKLabel("Continue"),
-				zenity.ExtraButton("Rescan devices"),
-			)
+			if runtime.GOOS == "linux" { // No extra button on Windows/macOS
+				device, err = zenity.List("Select a target device to flash the Windows ISO to:\n\n"+
+					"⚠️ Warning: All data on the USB drive you select will be ERASED!\n"+
+					"If you have any files stored on the drive, back them up before proceeding!",
+					stringifiedDevices,
+					zenity.Width(640),
+					zenity.Height(480),
+					zenity.WindowIcon(zenity.QuestionIcon),
+					zenity.Title("glassUSB - Select target USB drive"),
+					zenity.DisallowEmpty(),
+					zenity.RadioList(),
+					zenity.OKLabel("Continue"),
+					zenity.ExtraButton("Rescan devices"),
+				)
+			} else {
+				device, err = zenity.List("Select a target device to flash the Windows ISO to:\n\n"+
+					"⚠️ Warning: All data on the USB drive you select will be ERASED!\n"+
+					"If you have any files stored on the drive, back them up before proceeding!",
+					stringifiedDevices,
+					zenity.Width(640),
+					zenity.Height(480),
+					zenity.WindowIcon(zenity.QuestionIcon),
+					zenity.Title("glassUSB - Select target USB drive"),
+					zenity.DisallowEmpty(),
+					zenity.RadioList(),
+					zenity.OKLabel("Continue"),
+				)
+			}
 			if errors.Is(err, zenity.ErrExtraButton) {
 				continue
 			} else if err != nil {
@@ -457,8 +482,10 @@ The following device will be converted into a Windows installation USB drive:
 			print(log)
 			if dlg != nil {
 				separator := "\n"
-				if runtime.GOOS != "windows" && runtime.GOOS != "darwin" { // TODO: Test macOS line break handling
-					separator = "\\n" // Hack: Replace newlines with literal \n for zenity on Linux, which seems to not handle newlines in progress dialog text properly
+				if runtime.GOOS == "linux" {
+					// Hack: Replace newlines with literal \n for zenity on Linux, which seems to not handle newlines in progress dialog text properly
+					// Meanwhile, macOS doesn't even show newlines lol
+					separator = "\\n"
 				}
 				dlg.Text(progStr + separator + strings.TrimSpace(log))
 			}
@@ -499,8 +526,10 @@ The following device will be converted into a Windows installation USB drive:
 			print(log)
 			if dlg != nil {
 				separator := "\n"
-				if runtime.GOOS != "windows" && runtime.GOOS != "darwin" { // TODO: Test macOS line break handling
-					separator = "\\n" // Hack: Replace newlines with literal \n for zenity on Linux, which seems to not handle newlines in progress dialog text properly
+				if runtime.GOOS == "linux" {
+					// Hack: Replace newlines with literal \n for zenity on Linux, which seems to not handle newlines in progress dialog text properly
+					// Meanwhile, macOS doesn't even show newlines lol
+					separator = "\\n"
 				}
 				dlg.Text(progStr + separator + strings.TrimSpace(log))
 			}
