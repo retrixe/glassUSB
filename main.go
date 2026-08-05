@@ -547,10 +547,10 @@ The following device will be converted into a Windows installation USB drive:
 	if gptFlag == nil || !*gptFlag {
 		currentPhase++
 		logProgress("Phase " + strconv.Itoa(currentPhase) + "/" + totalPhases + ": Writing MBR bootloader")
-		if err := WriteMBRToPartition(primaryPartition); err != nil {
-			return logError("failed to write MBR bootloader: %w", err)
+		if err := WriteVBRToPartition(primaryPartition); err != nil {
+			return logError("failed to write VBR bootloader: %w", err)
 		}
-		if err := WriteMBRToPartition(blockDevice); err != nil {
+		if err := WriteMBRToDisk(blockDevice); err != nil {
 			return logError("failed to write MBR bootloader: %w", err)
 		}
 	}
