@@ -394,9 +394,10 @@ The following device will be converted into a Windows installation USB drive:
 		}
 	}
 	blockDeviceSize, err := GetBlockDeviceSize(blockDevice)
+	const deviceSizeMargin = 4 * 1024 * 1024 // Extra 4 MB margin for partition table, UEFI:NTFS, etc
 	if err != nil {
 		return logError("failed to get size of destination: %w", err)
-	} else if srcStat.Size() > blockDeviceSize {
+	} else if srcStat.Size()+deviceSizeMargin > blockDeviceSize {
 		if !debugBypassChecks {
 			return logError("cannot write ISO to destination: ISO size (%s) is larger than device size (%s)!",
 				imaging.BytesToString(int(srcStat.Size()), true),
