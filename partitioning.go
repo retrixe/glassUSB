@@ -5,10 +5,30 @@ import (
 	"fmt"
 
 	"github.com/diskfs/go-diskfs"
+	"github.com/diskfs/go-diskfs/disk"
 	"github.com/diskfs/go-diskfs/partition"
 	"github.com/diskfs/go-diskfs/partition/gpt"
 	"github.com/diskfs/go-diskfs/partition/mbr"
 )
+
+// wipeStaleGPTHeaders removes leftover GPT headers so go-diskfs reads the new MBR table.
+// go-diskfs prefers GPT over MBR when opening a disk; writing only MBR entries does not
+// invalidate an existing GPT header (common on loop devices and previously-GPT drives).
+func wipeStaleGPTHeaders(d *disk.Disk) error {
+	rw, err := d.Backend.Writable()
+	if err != nil {
+		return err
+	}
+	lss := d.LogicalBlocksize
+	zero := make([]byte, lss)
+	if _, err := rw.WriteAt(zero, lss); err != nil {
+		return fmt.Errorf("failed to wipe primary GPT header: %w", err)
+	}
+	if _, err := rw.WriteAt(zero, d.Size-lss); err != nil {
+		return fmt.Errorf("failed to wipe backup GPT header: %w", err)
+	}
+	return nil
+}
 
 // FormatDiskForSinglePartition formats a disk with a single ESP partition spanning the entire disk.
 func FormatDiskForSinglePartition(name string, useGpt bool) error {
@@ -33,6 +53,9 @@ func FormatDiskForSinglePartition(name string, useGpt bool) error {
 			},
 		}
 	} else {
+		if err := wipeStaleGPTHeaders(disk); err != nil {
+			return fmt.Errorf("failed to wipe stale GPT headers: %w", err)
+		}
 		table = &mbr.Table{
 			Partitions: []*mbr.Partition{
 				{Start: uint32(primaryPartitionStart), Size: uint32(primaryPartitionSize), Type: mbr.EFISystem, Bootable: true},
@@ -80,6 +103,9 @@ func FormatDiskForUEFINTFS(name string, useGpt bool) error {
 			},
 		}
 	} else {
+		if err := wipeStaleGPTHeaders(disk); err != nil {
+			return fmt.Errorf("failed to wipe stale GPT headers: %w", err)
+		}
 		table = &mbr.Table{
 			Partitions: []*mbr.Partition{
 				{Start: uint32(primaryPartitionStart), Size: uint32(primaryPartitionSize), Type: mbr.NTFS, Bootable: true},
@@ -102,7 +128,7 @@ func WriteUEFINTFSToPartition(name string, partition int) error {
 	}
 	defer disk.Close()
 
-	if _, err := disk.WritePartitionContents(2, bytes.NewReader(UEFI_NTFS_IMG)); err != nil {
+	if _, err := disk.WritePartitionContents(partition, bytes.NewReader(UEFI_NTFS_IMG)); err != nil {
 		return fmt.Errorf("failed to write UEFI:NTFS contents to partition: %w", err)
 	}
 	return nil
