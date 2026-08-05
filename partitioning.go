@@ -11,21 +11,38 @@ import (
 	"github.com/diskfs/go-diskfs/partition/mbr"
 )
 
-// wipeStaleGPTHeaders removes leftover GPT headers so go-diskfs reads the new MBR table.
-// go-diskfs prefers GPT over MBR when opening a disk; writing only MBR entries does not
-// invalidate an existing GPT header (common on loop devices and previously-GPT drives).
-func wipeStaleGPTHeaders(d *disk.Disk) error {
+// gptMetadataLBAs is the primary/backup GPT header (LBA 1) plus the default 128-entry
+// partition array (32 sectors at 512 bytes/sector).
+const gptMetadataLBAs = 33
+
+// wipeStaleGPTMetadata removes leftover GPT headers and partition entry arrays so
+// go-diskfs reads the new MBR table. go-diskfs prefers GPT over MBR when opening
+// a disk; mbr.Table.Write only updates the four entries at the end of LBA 0.
+func wipeStaleGPTMetadata(d *disk.Disk) error {
 	rw, err := d.Backend.Writable()
 	if err != nil {
 		return err
 	}
 	lss := d.LogicalBlocksize
-	zero := make([]byte, lss)
-	if _, err := rw.WriteAt(zero, lss); err != nil {
-		return fmt.Errorf("failed to wipe primary GPT header: %w", err)
+	if lss <= 0 {
+		return fmt.Errorf("invalid logical block size: %d", lss)
 	}
-	if _, err := rw.WriteAt(zero, d.Size-lss); err != nil {
-		return fmt.Errorf("failed to wipe backup GPT header: %w", err)
+	diskLBAs := d.Size / lss
+	if diskLBAs < gptMetadataLBAs*2+1 {
+		return fmt.Errorf("disk is too small to wipe GPT metadata: %d logical blocks", diskLBAs)
+	}
+
+	zero := make([]byte, lss)
+	for lba := int64(1); lba <= gptMetadataLBAs; lba++ {
+		if _, err := rw.WriteAt(zero, lba*lss); err != nil {
+			return fmt.Errorf("failed to wipe primary GPT metadata at LBA %d: %w", lba, err)
+		}
+	}
+	for i := int64(0); i < gptMetadataLBAs; i++ {
+		lba := diskLBAs - 1 - i
+		if _, err := rw.WriteAt(zero, lba*lss); err != nil {
+			return fmt.Errorf("failed to wipe backup GPT metadata at LBA %d: %w", lba, err)
+		}
 	}
 	return nil
 }
@@ -53,8 +70,8 @@ func FormatDiskForSinglePartition(name string, useGpt bool) error {
 			},
 		}
 	} else {
-		if err := wipeStaleGPTHeaders(disk); err != nil {
-			return fmt.Errorf("failed to wipe stale GPT headers: %w", err)
+		if err := wipeStaleGPTMetadata(disk); err != nil {
+			return fmt.Errorf("failed to wipe stale GPT metadata: %w", err)
 		}
 		table = &mbr.Table{
 			Partitions: []*mbr.Partition{
@@ -103,8 +120,8 @@ func FormatDiskForUEFINTFS(name string, useGpt bool) error {
 			},
 		}
 	} else {
-		if err := wipeStaleGPTHeaders(disk); err != nil {
-			return fmt.Errorf("failed to wipe stale GPT headers: %w", err)
+		if err := wipeStaleGPTMetadata(disk); err != nil {
+			return fmt.Errorf("failed to wipe stale GPT metadata: %w", err)
 		}
 		table = &mbr.Table{
 			Partitions: []*mbr.Partition{
