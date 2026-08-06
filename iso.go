@@ -104,9 +104,6 @@ func ExtractISOToLocation(ctx context.Context, logFn func(string), iso *udf.Udf,
 }
 
 func extractISOFileToLocation(ctx context.Context, file udf.File, location string, progress *atomic.Int64) error {
-	if file.Name() == "install.wim" {
-		return nil // FIXME: Skip install.wim
-	}
 	if file.IsDir() {
 		folderPath := filepath.Join(location, file.Name())
 		if err := os.MkdirAll(folderPath, file.Mode().Perm()); err != nil {
@@ -194,9 +191,6 @@ func ValidateISOAgainstLocation(ctx context.Context, logFn func(string), iso *ud
 }
 
 func validateISOFileAgainstLocation(ctx context.Context, file udf.File, location string, progress *atomic.Int64) error {
-	if file.Name() == "install.wim" {
-		return nil // FIXME: Skip install.wim
-	}
 	if file.IsDir() {
 		folderPath := filepath.Join(location, file.Name())
 		validNames := make(map[string]struct{})
