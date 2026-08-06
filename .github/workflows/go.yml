@@ -1,0 +1,87 @@
+name: Go CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    name: Build
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-22.04, macos-latest]
+    steps:
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v4
+        with:
+          submodules: "true"
+
+      - name: Set up Go >=1.24
+        uses: actions/setup-go@v5
+        with:
+          go-version: ">=1.24.6"
+        id: go
+
+      - name: Get dependencies
+        run: go get -v -t -d ./...
+
+      - name: Test
+        run: |
+          sh build-ms-sys.sh
+          go test -v .
+
+#      - name: Build for Windows
+#        if: ${{ success() && matrix.os == 'windows-latest' }}
+#        run: .\scripts\build-with-webui.ps1 -ldflags="-s -w" -v .
+#
+#      - name: Build ARM64 binary for Windows
+#        if: ${{ success() && matrix.os == 'windows-latest' }}
+#        run: |
+#          $env:GOARCH = "arm64"
+#          go build -o glassusb-arm64.exe -ldflags="-s -w" -v .
+
+      - name: Install Linux cross compilers
+        if: ${{ success() && startsWith(matrix.os, 'ubuntu') }}
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu gcc-arm-linux-gnueabihf
+
+      - name: Build Intel binary (Linux)
+        if: ${{ success() && startsWith(matrix.os, 'ubuntu') }}
+        run: |
+          CC=gcc sh build-ms-sys.sh
+          GOARCH=amd64 go build -o glassusb-x86_64 -ldflags="-s -w" -v .
+
+      - name: Build ARMv8 binary (Linux)
+        if: ${{ success() && startsWith(matrix.os, 'ubuntu') }}
+        run: |
+          CC=aarch64-linux-gnu-gcc sh build-ms-sys.sh
+          GOARCH=arm64 go build -o glassusb-aarch64 -ldflags="-s -w" -v .
+
+      - name: Build ARMv6 binary (Linux)
+        if: ${{ success() && startsWith(matrix.os, 'ubuntu') }}
+        run: |
+          CC=arm-linux-gnueabihf-gcc sh build-ms-sys.sh
+          GOARCH=arm GOARM=6 go build -o glassusb-armv6 -ldflags="-s -w" -v .
+
+      - name: Build Intel binary (macOS)
+        if: ${{ success() && matrix.os == 'macos-latest' }}
+        run: |
+          CC="clang -arch x86_64" sh build-ms-sys.sh
+          GOARCH=amd64 go build -o glassusb-x86_64 -ldflags="-s -w" -v .
+
+      - name: Build ARMv8 binary (macOS)
+        if: ${{ success() && matrix.os == 'macos-latest' }}
+        run: |
+          CC="clang -arch arm64" sh build-ms-sys.sh
+          GOARCH=arm64 go build -o glassusb-aarch64 -ldflags="-s -w" -v .
+
+      - name: Upload a Build Artifact
+        uses: actions/upload-artifact@v4
+        if: ${{ success() }}
+        with:
+          name: glassusb-${{ matrix.os }}
+          path: glassusb*

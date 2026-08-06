@@ -1,5 +1,5 @@
 #!/bin/sh
-set -euo pipefail
+set -eu
 
 root="$(cd "$(dirname "$0")" && pwd)"
 cd "$root/ms-sys"
