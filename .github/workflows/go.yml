@@ -53,31 +53,35 @@ jobs:
         if: ${{ success() && startsWith(matrix.os, 'ubuntu') }}
         run: |
           CC=gcc sh build-ms-sys.sh
-          GOARCH=amd64 go build -o glassusb-x86_64 -ldflags="-s -w" -v .
+          GOARCH=amd64 go build -o glassusb-linux-x86_64 -ldflags="-s -w" -v .
 
       - name: Build ARMv8 binary (Linux)
         if: ${{ success() && startsWith(matrix.os, 'ubuntu') }}
         run: |
           CC=aarch64-linux-gnu-gcc sh build-ms-sys.sh
-          GOARCH=arm64 go build -o glassusb-aarch64 -ldflags="-s -w" -v .
+          GOARCH=arm64 go build -o glassusb-linux-aarch64 -ldflags="-s -w" -v .
 
       - name: Build ARMv6 binary (Linux)
         if: ${{ success() && startsWith(matrix.os, 'ubuntu') }}
         run: |
           CC="arm-linux-gnueabihf-gcc -march=armv6+fp -marm" sh build-ms-sys.sh
-          GOARCH=arm GOARM=6 go build -o glassusb-armv6 -ldflags="-s -w" -v .
+          GOARCH=arm GOARM=6 go build -o glassusb-linux-armv6l -ldflags="-s -w" -v .
+          # The ARMv6 build runs on ARMv7/ARMv8-32 too; provide copies under the
+          # names uname -m reports there so the README's download URL resolves.
+          cp glassusb-linux-armv6l glassusb-linux-armv7l
+          cp glassusb-linux-armv6l glassusb-linux-armv8l
 
       - name: Build Intel binary (macOS)
         if: ${{ success() && matrix.os == 'macos-latest' }}
         run: |
           CC="clang -arch x86_64" sh build-ms-sys.sh
-          GOARCH=amd64 go build -o glassusb-x86_64 -ldflags="-s -w" -v .
+          GOARCH=amd64 go build -o glassusb-macos-x86_64 -ldflags="-s -w" -v .
 
       - name: Build ARMv8 binary (macOS)
         if: ${{ success() && matrix.os == 'macos-latest' }}
         run: |
           CC="clang -arch arm64" sh build-ms-sys.sh
-          GOARCH=arm64 go build -o glassusb-aarch64 -ldflags="-s -w" -v .
+          GOARCH=arm64 go build -o glassusb-macos-arm64 -ldflags="-s -w" -v .
 
       - name: Upload a Build Artifact
         uses: actions/upload-artifact@v4
