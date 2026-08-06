@@ -27,6 +27,9 @@ var versionFlag = flag.Bool("version", false, "Show version")
 
 func mainUsage() {
 	println("Usage: glassUSB [command] [options]")
+	println("\nglassUSB is a simple tool for Linux systems to create a bootable Windows USB")
+	println("installer from a Windows ISO / DVD image. It provides both an easy to use CLI and")
+	println("interactive GUI wizard.")
 	println("\nAvailable commands:")
 	println("  flash       Flash a Windows ISO to a specific USB device.")
 	println("  wizard      (Beta) Start a GUI wizard for flashing Windows ISOs to a USB device.")
