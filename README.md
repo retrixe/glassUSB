@@ -2,15 +2,15 @@
 
 Create a bootable Windows USB from the terminal 🫗
 
-glassUSB is a simple tool for Linux to create a bootable Windows USB installer from a Windows DVD image, with both an easy to use CLI and interactive GUI wizard.
+glassUSB is a simple<!-- cross-platform--> tool for Linux systems to create a bootable Windows USB installer from a Windows ISO / DVD image. It provides both an easy to use CLI and interactive GUI wizard.
 
 ## Compatibility
 
 - (Alpha note) *glassUSB has only been tested with Windows 10/11 images in UEFI mode. Legacy BIOS/CSM mode and Windows Vista+ support is not fully tested, since I don't have hardware available.*
-- glassUSB is a Linux-only tool at the moment. Support for macOS is being worked on.
-- glassUSB only supports Windows Vista and later. Windows XP and earlier may not work. (Contributions welcome!)
-- glassUSB uses an MBR partitioning scheme by default and supports both UEFI and Legacy BIOS boot modes. GPT partitioning is also supported for UEFI-only boot.
-- Support for Windows on ARM is untested and may not work. (Contributions welcome!)
+- glassUSB only supports Windows Vista, 7, 8.x, 10 and 11.\
+Windows XP and earlier may not work. (Contributions welcome!)
+- glassUSB uses an MBR partitioning scheme by default, which supports both UEFI and Legacy BIOS boot modes. GPT partitioning is also supported for UEFI-only boot.
+- glassUSB has only been tested on 64-bit x86 systems. 32-bit Windows and Windows on ARM should theoretically work, but are untested. (Contributions welcome!)
 
 ## Usage
 
