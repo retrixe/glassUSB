@@ -64,7 +64,7 @@ jobs:
       - name: Build ARMv6 binary (Linux)
         if: ${{ success() && startsWith(matrix.os, 'ubuntu') }}
         run: |
-          CC=arm-linux-gnueabihf-gcc sh build-ms-sys.sh
+          CC="arm-linux-gnueabihf-gcc -march=armv6+fp -marm" sh build-ms-sys.sh
           GOARCH=arm GOARM=6 go build -o glassusb-armv6 -ldflags="-s -w" -v .
 
       - name: Build Intel binary (macOS)
