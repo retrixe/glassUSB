@@ -30,6 +30,8 @@ func mainUsage() {
 	println("\nglassUSB is a simple tool for Linux systems to create a bootable Windows USB")
 	println("installer from a Windows ISO / DVD image. It provides both an easy to use CLI and")
 	println("interactive GUI wizard.")
+	println("\nNote: glassUSB should be run with root permissions (`sudo`) to write to devices.")
+	println("The wizard must be run with `sudo -E` on Linux to allow dialogs to show correctly.")
 	println("\nAvailable commands:")
 	println("  flash       Flash a Windows ISO to a specific USB device.")
 	println("  wizard      (Beta) Start a GUI wizard for flashing Windows ISOs to a USB device.")
@@ -65,6 +67,8 @@ func flashUsage() {
 func flashWizardUsage() {
 	println("Usage: glassUSB wizard [options]")
 	println("\nStart the GUI wizard for flashing Windows ISOs to a USB device.")
+	println("\nNote: The wizard must be run with `sudo -E` on Linux, to allow Zenity to show")
+	println("dialogs correctly.")
 	println("\nOptions:")
 	flashFlagSet.PrintDefaults()
 }
@@ -139,7 +143,7 @@ func flashCommand(wizard bool) error {
 		return err
 	}
 
-	// Look for prerequisites on system and change defaults accordingly
+	// Look for prerequisites on system and change fs flag defaults accordingly
 	fsFlagStruct := flashFlagSet.Lookup("fs")
 	supportedFilesystems := []string{}
 	fullySupportedFsAvailable := false
@@ -176,6 +180,11 @@ func flashCommand(wizard bool) error {
 	}
 	debugBypassChecksEnv := os.Getenv("__GLASSUSB_DEBUG_BYPASS_CHECKS")
 	debugBypassChecks := debugBypassChecksEnv == "true" || debugBypassChecksEnv == "1"
+
+	// Check for root permissions before proceeding
+	if os.Getuid() > 0 && !debugBypassChecks {
+		return logError("glassUSB must be run with root permissions (`sudo`) to write to devices, exiting...")
+	}
 
 	// Warn about exFAT and FAT32 limitations
 	addendum := "If you encounter any issues, try installing NTFS drivers on your system (Paragon NTFS for macOS, ntfs-3g for Linux)."
