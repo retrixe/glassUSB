@@ -12,29 +12,30 @@ import (
 //go:embed binaries/ms-sys
 var MS_SYS_BIN []byte
 
-func GetMsSysAsProgram() (*os.File, error) {
+func GetMsSysAsProgram() (*os.File, func(), error) {
 	f, err := os.CreateTemp(os.TempDir(), "ms-sys-*.bin")
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	defer f.Close()
 
 	if _, err := f.Write(MS_SYS_BIN); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	if err := f.Chmod(0755); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	return f, nil
+	return f, func() { os.Remove(f.Name()) }, nil
 }
 
 func WriteMBRToDisk(device string) error {
-	msSys, err := GetMsSysAsProgram()
+	msSys, cleanup, err := GetMsSysAsProgram()
 	if err != nil {
 		return err
 	}
+	defer cleanup()
 	// FIXME: Test if CSM works at all, before experimenting with Rufus MBR (-r)
 	// Switch to Rufus MBR (-r) in the future, as it supports unattended installs
 	// First, we need to test if CSM works at all, before experimenting with Rufus MBR
@@ -45,10 +46,11 @@ func WriteMBRToDisk(device string) error {
 }
 
 func WriteVBRToPartition(partition string) error {
-	msSys, err := GetMsSysAsProgram()
+	msSys, cleanup, err := GetMsSysAsProgram()
 	if err != nil {
 		return err
 	}
+	defer cleanup()
 	if out, err := exec.Command(msSys.Name(), "-w", partition).CombinedOutput(); err != nil {
 		return fmt.Errorf("failed to write VBR to %s: %w\noutput: %s", partition, err, out)
 	}
