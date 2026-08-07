@@ -20,7 +20,7 @@ import (
 	"github.com/retrixe/imprint/imaging"
 )
 
-const version = "1.0.0-dev"
+const version = "1.0.0-alpha.1"
 
 var vFlag = flag.Bool("v", false, "")
 var versionFlag = flag.Bool("version", false, "Show version")
