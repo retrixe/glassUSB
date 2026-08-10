@@ -346,6 +346,11 @@ The following device will be converted into a Windows installation USB drive:
 		defer dlg.Close()
 
 		args = []string{isoPath, deviceName}
+		log.Println("Selected ISO:", isoPath)
+		log.Println("Target device:", device)
+	} else {
+		log.Println("Selected ISO:", args[0])
+		log.Println("Target device path:", args[1])
 	}
 
 	totalPhasesNum := 7
