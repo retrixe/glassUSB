@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"fmt"
+	"time"
 
 	"github.com/diskfs/go-diskfs"
 	"github.com/diskfs/go-diskfs/disk"
@@ -89,6 +90,7 @@ func FormatDiskForSinglePartition(name string, useGpt bool) error {
 	if err := disk.Partition(table); err != nil {
 		return fmt.Errorf("failed to create partition table: %w", err)
 	}
+	time.Sleep(time.Second) // Wait for the OS to recognize the new partition table
 	return nil
 }
 
@@ -143,6 +145,7 @@ func FormatDiskForUEFINTFS(name string, useGpt bool) error {
 	if err := disk.Partition(table); err != nil {
 		return fmt.Errorf("failed to create partition table: %w", err)
 	}
+	time.Sleep(time.Second) // Wait for the OS to recognize the new partition table
 	return nil
 }
 
