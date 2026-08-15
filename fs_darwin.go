@@ -12,8 +12,8 @@ func IsFAT32Available() bool {
 	return err == nil
 }
 
-func MakeFAT32(device string) error {
-	if out, err := exec.Command("newfs_msdos", "-F", "32", device).CombinedOutput(); err != nil {
+func MakeFAT32(device string, label string) error {
+	if out, err := exec.Command("newfs_msdos", "-F", "32", "-v", truncateString(label, 11), device).CombinedOutput(); err != nil {
 		return fmt.Errorf("failed to create FAT32 filesystem: %w\noutput: %s", err, out)
 	}
 	return nil
@@ -24,8 +24,8 @@ func IsExFATAvailable() bool {
 	return err == nil
 }
 
-func MakeExFAT(device string) error {
-	if out, err := exec.Command("newfs_exfat", device).CombinedOutput(); err != nil {
+func MakeExFAT(device string, label string) error {
+	if out, err := exec.Command("newfs_exfat", "-v", truncateString(label, 11), device).CombinedOutput(); err != nil {
 		return fmt.Errorf("failed to create exFAT filesystem: %w\noutput: %s", err, out)
 	}
 	return nil
@@ -36,8 +36,8 @@ func IsNTFSAvailable() bool {
 	return err == nil
 }
 
-func MakeNTFS(device string) error {
-	if out, err := exec.Command("newfs_ntfs", "-q", device).CombinedOutput(); err != nil {
+func MakeNTFS(device string, label string) error {
+	if out, err := exec.Command("newfs_ntfs", "-q", "-v", truncateString(label, 32), device).CombinedOutput(); err != nil {
 		return fmt.Errorf("failed to create NTFS filesystem: %w\noutput: %s", err, out)
 	}
 	return nil
