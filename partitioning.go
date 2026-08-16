@@ -123,11 +123,11 @@ func FormatDiskForUEFINTFS(name string, useGpt bool) error {
 		table = &gpt.Table{
 			ProtectiveMBR: true,
 			Partitions: []*gpt.Partition{
-				{Start: uint64(primaryPartitionStart), End: uint64(primaryPartitionEnd), Type: gpt.MicrosoftBasicData, Name: "Windows ISO"},
+				{Index: 1, Start: uint64(primaryPartitionStart), End: uint64(primaryPartitionEnd), Type: gpt.MicrosoftBasicData, Name: "Windows ISO"},
 				// Apparently, Microsoft hates if you have an ESP on your GPT-bootable drive and another ESP on the main system...
 				// Source: https://github.com/pbatard/rufus/blob/6d8fbf98305ff37eb531c45cbd6ff44563c53917/src/drive.c#L2479
 				// Not verified myself, but preventatively align with Rufus by setting type MicrosoftBasicData and attribute GPT_BASIC_DATA_ATTRIBUTE_NO_DRIVE_LETTER.
-				{Start: uint64(secondaryPartitionStart), End: uint64(secondaryPartitionEnd), Type: gpt.MicrosoftBasicData, Name: "UEFI:NTFS", Attributes: 0x8000000000000000},
+				{Index: 2, Start: uint64(secondaryPartitionStart), End: uint64(secondaryPartitionEnd), Type: gpt.MicrosoftBasicData, Name: "UEFI:NTFS", Attributes: 0x8000000000000000},
 			},
 		}
 	} else {

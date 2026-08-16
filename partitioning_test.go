@@ -28,7 +28,7 @@ func TestWipeStaleGPTMetadata(t *testing.T) {
 	table := &gpt.Table{
 		ProtectiveMBR: true,
 		Partitions: []*gpt.Partition{
-			{Start: 2048, End: 2048 + 1024 - 1, Type: gpt.EFISystemPartition, Name: "EFI"},
+			{Index: 1, Start: 2048, End: 2048 + 1024 - 1, Type: gpt.EFISystemPartition, Name: "EFI"},
 		},
 	}
 	if err := disk.Partition(table); err != nil {
@@ -89,7 +89,7 @@ func TestFormatDiskForUEFINTFSWithValidStaleGPT(t *testing.T) {
 	table := &gpt.Table{
 		ProtectiveMBR: true,
 		Partitions: []*gpt.Partition{
-			{Start: 2048, End: 2048 + 1024 - 1, Type: gpt.EFISystemPartition, Name: "EFI"},
+			{Index: 1, Start: 2048, End: 2048 + 1024 - 1, Type: gpt.EFISystemPartition, Name: "EFI"},
 		},
 	}
 	if err := disk.Partition(table); err != nil {
