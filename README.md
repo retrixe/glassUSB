@@ -10,7 +10,8 @@ glassUSB is a simple<!-- cross-platform--> tool for Linux systems to create a bo
 - glassUSB only supports 64-bit Windows Vista, 7, 8.x, 10 and 11.\
 32-bit Windows and Windows on ARM should work, but are currently untested. If it works for you, let me know!\
 Windows XP and earlier are unsupported.
-- glassUSB uses an MBR partitioning scheme by default, which supports both UEFI and Legacy BIOS boot modes. GPT partitioning is also supported for UEFI-only boot.
+- UEFI boot is only supported on Windows 8 and later. Windows 7 and earlier will only boot in Legacy BIOS/CSM mode.
+- glassUSB uses an MBR partitioning scheme by default, which supports both UEFI and Legacy BIOS/CSM boot modes. GPT partitioning is also supported for UEFI-only boot.
 
 ## Usage
 
