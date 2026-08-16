@@ -13,7 +13,7 @@ func IsFAT32Available() bool {
 }
 
 func MakeFAT32(device string, label string) error {
-	if out, err := exec.Command("mkfs.vfat", "-F", "32", "-v", "-n", truncateString(label, 11), device).CombinedOutput(); err != nil {
+	if out, err := exec.Command("mkfs.vfat", "-F", "32", "-v", "-n", label, device).CombinedOutput(); err != nil {
 		return fmt.Errorf("failed to create FAT32 filesystem: %w\noutput: %s", err, out)
 	}
 	return nil
@@ -25,7 +25,7 @@ func IsExFATAvailable() bool {
 }
 
 func MakeExFAT(device string, label string) error {
-	if out, err := exec.Command("mkfs.exfat", "-v", "-L", truncateString(label, 11), device).CombinedOutput(); err != nil {
+	if out, err := exec.Command("mkfs.exfat", "-v", "-L", label, device).CombinedOutput(); err != nil {
 		return fmt.Errorf("failed to create exFAT filesystem: %w\noutput: %s", err, out)
 	}
 	return nil
@@ -38,7 +38,7 @@ func IsNTFSAvailable() bool {
 
 func MakeNTFS(device string, label string) error {
 	// TODO: These are ntfs-3g specific parameters, update when ntfsplus is a thing
-	if out, err := exec.Command("mkfs.ntfs", "-Q", "-v", "-L", truncateString(label, 32), device).CombinedOutput(); err != nil {
+	if out, err := exec.Command("mkfs.ntfs", "-Q", "-v", "-L", label, device).CombinedOutput(); err != nil {
 		return fmt.Errorf("failed to create NTFS filesystem: %w\noutput: %s", err, out)
 	}
 	return nil

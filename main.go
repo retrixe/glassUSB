@@ -457,21 +457,21 @@ The following device will be converted into a Windows installation USB drive:
 	currentPhase++
 	logProgress("Phase " + strconv.Itoa(currentPhase) + "/" + totalPhases + ": Creating sources partition")
 	primaryPartition := GetBlockDevicePartition(blockDevice, 1)
-	// TODO: Extract filesystem label from ISO label like Rufus does
-	// We will need to implement label character validation for each filesystem type, though:
-	// https://github.com/pbatard/rufus/blob/6d8fbf98305ff37eb531c45cbd6ff44563c53917/src/format.c#L263
-	// may be a helpful reference
+	windowsVolumeLabel := iso.GetLogicalVolumeIdentifier()
+	if windowsVolumeLabel == "" {
+		windowsVolumeLabel = "Windows USB"
+	}
 	switch *fsFlag {
 	case "exfat":
-		if err := MakeExFAT(primaryPartition, "Windows USB"); err != nil {
+		if err := MakeExFAT(primaryPartition, sanitizeExFATLabel(windowsVolumeLabel)); err != nil {
 			return logError("failed to create exFAT filesystem: %w", err)
 		}
 	case "ntfs":
-		if err := MakeNTFS(primaryPartition, "Windows USB"); err != nil {
+		if err := MakeNTFS(primaryPartition, sanitizeNTFSLabel(windowsVolumeLabel)); err != nil {
 			return logError("failed to create NTFS filesystem: %w", err)
 		}
 	case "fat32":
-		if err := MakeFAT32(primaryPartition, "Windows USB"); err != nil {
+		if err := MakeFAT32(primaryPartition, sanitizeFATLabel(windowsVolumeLabel)); err != nil {
 			return logError("failed to create FAT32 filesystem: %w", err)
 		}
 	}

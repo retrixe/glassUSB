@@ -11,9 +11,9 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/Xmister/udf"
 	"github.com/diskfs/go-diskfs"
 	"github.com/retrixe/imprint/imaging"
+	"github.com/retrixe/udf"
 )
 
 var ErrInvalidWindowsISO = errors.New("this file is not recognised as a valid Windows ISO image in UDF format")
