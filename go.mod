@@ -5,7 +5,7 @@ go 1.25.0
 require (
 	github.com/diskfs/go-diskfs v1.9.4
 	github.com/ncruces/zenity v0.10.15
-	github.com/retrixe/imprint v0.0.0-20260701124812-ce188b5b36d4
+	github.com/retrixe/imprint v0.0.0-20260816163047-10dc507c3e64
 	github.com/retrixe/udf v0.0.0-20260815224314-7054990a8aeb
 	golang.org/x/sys v0.47.0
 )

@@ -32,8 +32,8 @@ github.com/pmezard/go-difflib v1.0.0 h1:4DBwDE0NGyQoBHbLQYPwSUPoCMWR5BEzIk/f1lZb
 github.com/pmezard/go-difflib v1.0.0/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
 github.com/randall77/makefat v0.0.0-20260406194835-1b91746796b7 h1:m1yKMZwDSXkT5o2MKhd6ihdzb2dYb6eElNE04xjOSEY=
 github.com/randall77/makefat v0.0.0-20260406194835-1b91746796b7/go.mod h1:T1TLSfyWVBRXVGzWd0o9BI4kfoO9InEgfQe4NV3mLz8=
-github.com/retrixe/imprint v0.0.0-20260701124812-ce188b5b36d4 h1:loKdA9XARrdLELdpbhdKP/3768OOulytlnUVcE0jxds=
-github.com/retrixe/imprint v0.0.0-20260701124812-ce188b5b36d4/go.mod h1:GO5g8dez717D5qM42/mANXSUKaSLey8dfdVSqKXEEFs=
+github.com/retrixe/imprint v0.0.0-20260816163047-10dc507c3e64 h1:xL0bprVsCz3DGOK8EyVUXlTLF6Wnqrr9nqs8vrI9wwc=
+github.com/retrixe/imprint v0.0.0-20260816163047-10dc507c3e64/go.mod h1:GO5g8dez717D5qM42/mANXSUKaSLey8dfdVSqKXEEFs=
 github.com/retrixe/udf v0.0.0-20260815224314-7054990a8aeb h1:sMgyvXk2zFzoY3XmQJB/dIySgFkz1690uaL0DU6fJfM=
 github.com/retrixe/udf v0.0.0-20260815224314-7054990a8aeb/go.mod h1:zXZkCpidMX3XZcbZdVNOIatkGX/gn7pAwKILta9Kof8=
 github.com/sirupsen/logrus v1.10.0 h1:T8MxJJXVZkfcC5zSRMRAg2F8+lxjmUCGGWPzFxO+Msc=
