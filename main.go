@@ -16,6 +16,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/ncruces/zenity"
+	"github.com/retrixe/glassusb/wizard"
 	"github.com/retrixe/imprint/imaging"
 )
 
@@ -98,7 +99,7 @@ func main() {
 		}
 	} else if len(os.Args) >= 2 && os.Args[1] == "wizard" {
 		flashFlagSet.Usage = flashWizardUsage
-		p := tea.NewProgram(initialModel())
+		p := tea.NewProgram(wizard.InitialModel())
 		_, err := p.Run()
 		if err != nil {
 			log.Fatalln(err)
