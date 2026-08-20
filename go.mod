@@ -6,7 +6,7 @@ require (
 	github.com/diskfs/go-diskfs v1.9.4
 	github.com/ncruces/zenity v0.10.15
 	github.com/retrixe/imprint v0.0.0-20260816163047-10dc507c3e64
-	github.com/retrixe/udf v0.0.0-20260817080542-a37601ce2c55
+	github.com/retrixe/udf v0.0.0-20260820152015-734e0d0a5baf
 	golang.org/x/sys v0.47.0
 )
 
