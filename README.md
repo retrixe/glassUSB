@@ -29,29 +29,21 @@ glassUSB requires the following tools to be installed:
 
 These should be preinstalled on most desktop Linux distributions such as Ubuntu and Fedora. If you don't have them, install them via your package manager.
 
-#### Download
+#### Quick Start
 
-Download the latest binary for your system from the [releases page](https://github.com/retrixe/glassusb/releases) using the following commands:
+Download and run the latest binary for your system from the [releases page](https://github.com/retrixe/glassusb/releases) using the following commands:
 
 ```bash
 cd ~/Downloads/ # or wherever you want to download the binary
-wget -O glassusb "https://github.com/retrixe/glassUSB/releases/latest/download/glassusb-linux-$(uname -m)"
-chmod +x glassusb
-```
+wget -O glassusb "https://github.com/retrixe/glassUSB/releases/latest/download/glassusb-linux-$(uname -m)" && chmod +x glassusb
 
-#### GUI wizard
-
-Run the interactive wizard to flash a Windows ISO to a USB device:
-
-```bash
+# To start the interactive wizard, run:
 sudo -E ./glassusb wizard
 ```
 
-See `glassusb wizard --help` for advanced options, such as using GPT, selecting a custom filesystem, etc.
+#### Advanced Usage
 
-#### CLI
-
-Flash a Windows ISO to a USB device directly using the CLI:
+To flash a Windows ISO to a USB device directly using the CLI, run:
 
 ```bash
 # Replace `/path/to/windows.iso` with the path to your Windows ISO file, and
@@ -60,7 +52,7 @@ Flash a Windows ISO to a USB device directly using the CLI:
 sudo ./glassusb flash /path/to/windows.iso /dev/sdX
 ```
 
-See `glassusb flash --help` for advanced options, such as using GPT, selecting a custom filesystem, etc.
+See `glassusb flash --help` for advanced options, such as using GPT, selecting a custom filesystem, etc. The `glassusb wizard` command also supports the same CLI options.
 
 <!-- **GUI wizard** — needs your desktop session (D-Bus, display). `sudo -E` preserves those environment variables:
 
