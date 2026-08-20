@@ -18,7 +18,6 @@ Make sure you have a spare USB flash drive connected to your computer (>8 GB rec
 
 Press 'Continue' to select the Windows ISO you downloaded. Supported versions of Windows include Vista, 7 and newer.`,
 		DialogTypeInfo,
-		// FIXME: Replace with proper models that handle the wizard steps.
 		NewSelectIsoModel(),
 	)
 }

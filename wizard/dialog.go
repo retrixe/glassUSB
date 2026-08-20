@@ -14,7 +14,8 @@ type DialogModel struct {
 	height int
 	width  int
 	keyMap dialogKeys
-	help   help.Model
+
+	help help.Model
 
 	title      string
 	message    string

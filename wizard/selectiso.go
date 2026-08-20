@@ -15,8 +15,9 @@ import (
 // ==================== Model ====================
 
 type SelectIsoModel struct {
-	height     int
-	width      int
+	height int
+	width  int
+
 	help       help.Model
 	filepicker filepicker.Model
 
@@ -86,7 +87,7 @@ func (m SelectIsoModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	m.filepicker, cmd = m.filepicker.Update(msg)
 
 	if didSelect, path := m.filepicker.DidSelectFile(msg); didSelect {
-		return switchToModel(initialModelOld(path), m.height, m.width)
+		return switchToModel(NewSelectDeviceModel(path), m.height, m.width)
 	} else if didSelect, path := m.filepicker.DidSelectDisabledFile(msg); didSelect {
 		m.error = path + " is not valid."
 		return m, tea.Batch(cmd, clearErrorAfter(2*time.Second))
