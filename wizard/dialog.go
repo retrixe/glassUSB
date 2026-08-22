@@ -121,13 +121,13 @@ func (m DialogModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyPressMsg:
 		switch {
-		case key.Matches(msg, initialDialogKeyMap.Continue):
+		case key.Matches(msg, m.keyMap.Continue):
 			if m.nextModel == nil {
 				return m, tea.Quit
 			} else {
 				return switchToModel(m.nextModel, m.height, m.width)
 			}
-		case key.Matches(msg, initialDialogKeyMap.Quit):
+		case key.Matches(msg, m.keyMap.Quit):
 			return m, tea.Quit
 		case msg.String() == "ctrl+c":
 			return m, tea.Quit

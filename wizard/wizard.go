@@ -26,8 +26,8 @@ Press 'Continue' to select the Windows ISO you downloaded. Supported versions of
 
 func switchToModel(m tea.Model, height, width int) (tea.Model, tea.Cmd) {
 	initCmd := m.Init()
-	sizeCmd := tea.WindowSizeMsg{Width: width, Height: height}
-	return m, tea.Batch(initCmd, func() tea.Msg { return sizeCmd })
+	m, sizeCmd := m.Update(tea.WindowSizeMsg{Width: width, Height: height})
+	return m, tea.Batch(initCmd, sizeCmd)
 }
 
 type clearErrorMsg struct{}
