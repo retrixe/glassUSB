@@ -1,9 +1,14 @@
 package wizard
 
 import (
+	"time"
+
 	"charm.land/bubbles/v2/list"
 	tea "charm.land/bubbletea/v2"
+	"github.com/retrixe/imprint/imaging"
 )
+
+// FIXME support reloading
 
 // ==================== Model ====================
 
@@ -12,9 +17,11 @@ type SelectDeviceModel struct {
 	width   int
 	isoPath string
 
-	devices list.Model
+	deviceList list.Model
 
-	device string
+	device  string
+	devices []imaging.Device
+	err     error
 }
 
 type item struct {
@@ -23,30 +30,36 @@ type item struct {
 
 func (i item) Title() string       { return i.title }
 func (i item) Description() string { return i.desc }
-func (i item) FilterValue() string { return i.title } // FIXME: filter better
+func (i item) FilterValue() string { return i.title + " " + i.desc }
 
-func NewSelectDeviceModel(isoPath string) SelectDeviceModel {
-	m := SelectDeviceModel{
-		isoPath: isoPath,
-		devices: list.New([]list.Item{}, list.NewDefaultDelegate(), 0, 0), // FIXME
-		//spinner: spinner.New(spinner.WithSpinner(spinner.Dot)),
+type DevicesLoadedMsg struct {
+	devices []imaging.Device
+	err     error
+}
+
+func NewSelectDeviceModel(isoPath string) *SelectDeviceModel {
+	m := &SelectDeviceModel{
+		isoPath:    isoPath,
+		deviceList: list.New([]list.Item{}, list.NewDefaultDelegate(), 0, 0), // FIXME
+		//spinner:    spinner.New(spinner.WithSpinner(spinner.Dot)),
 	}
-	m.devices.Title = "glassUSB Media Creation Wizard - Select target USB drive"
-	// FIXME: Load devices
+	// FIXME: m.deviceList.SetSpinner(spinner.Pulse)
+	m.deviceList.Title = "glassUSB Media Creation Wizard - Select target USB drive"
 	return m
 }
 
-func (m SelectDeviceModel) Init() tea.Cmd {
-	return nil
+func (m *SelectDeviceModel) Init() tea.Cmd {
+	return tea.Batch(loadDevices, m.deviceList.StartSpinner())
 }
 
 // ==================== View ====================
 
-func (m SelectDeviceModel) View() tea.View {
+func (m *SelectDeviceModel) View() tea.View {
 	fullscreenDocStyle := docStyle.Height(m.height).Width(m.width)
 
 	var view string
-	view = fullscreenDocStyle.Render(m.devices.View())
+	// FIXME: Error state
+	view = fullscreenDocStyle.Render(m.deviceList.View())
 
 	v := tea.NewView(view)
 	v.AltScreen = true
@@ -55,7 +68,7 @@ func (m SelectDeviceModel) View() tea.View {
 
 // ==================== Controller ====================
 
-func (m SelectDeviceModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (m *SelectDeviceModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyPressMsg:
 		switch msg.String() {
@@ -67,11 +80,37 @@ func (m SelectDeviceModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width = msg.Width
 
 		x, y := docStyle.GetFrameSize()
-		m.devices.SetSize(msg.Width-x, msg.Height-y)
+		m.deviceList.SetSize(msg.Width-x, msg.Height-y)
+	case DevicesLoadedMsg:
+		if msg.err != nil {
+			m.err = msg.err
+			return m, nil
+		}
+		m.devices = msg.devices
+
+		items := make([]list.Item, len(m.devices))
+		for i, d := range m.devices {
+			if d.Model == "" {
+				items[i] = item{title: d.Name, desc: d.Size}
+			} else {
+				items[i] = item{title: d.Name, desc: d.Model + ", " + d.Size}
+			}
+		}
+		m.deviceList.StopSpinner()
+		return m, m.deviceList.SetItems(items)
 	}
 
-	var devicesCmd tea.Cmd
-	m.devices, devicesCmd = m.devices.Update(msg)
+	var deviceListCmd tea.Cmd
+	m.deviceList, deviceListCmd = m.deviceList.Update(msg)
 
-	return m, devicesCmd
+	return m, deviceListCmd
+}
+
+func loadDevices() tea.Msg {
+	time.Sleep(2 * time.Second)
+	devices, err := imaging.GetDevices(imaging.SystemPlatform)
+	if err != nil {
+		return DevicesLoadedMsg{err: err}
+	}
+	return DevicesLoadedMsg{devices: devices}
 }
