@@ -1,14 +1,14 @@
 package wizard
 
 import (
+	"errors"
 	"time"
 
+	"charm.land/bubbles/v2/key"
 	"charm.land/bubbles/v2/list"
 	tea "charm.land/bubbletea/v2"
 	"github.com/retrixe/imprint/imaging"
 )
-
-// FIXME support reloading
 
 // ==================== Model ====================
 
@@ -21,7 +21,6 @@ type SelectDeviceModel struct {
 
 	device  string
 	devices []imaging.Device
-	err     error
 }
 
 type item struct {
@@ -32,16 +31,38 @@ func (i item) Title() string       { return i.title }
 func (i item) Description() string { return i.desc }
 func (i item) FilterValue() string { return i.title + " " + i.desc }
 
+type selectDeviceListDelegateKeys struct{ Select, Reload key.Binding }
+
+var selectDeviceListDelegateKeyMap = selectDeviceListDelegateKeys{
+	Select: key.NewBinding(
+		key.WithHelp("enter", "select"),
+		key.WithKeys("enter"),
+	),
+	Reload: key.NewBinding(
+		key.WithHelp("r", "reload"),
+		key.WithKeys("r"),
+	),
+}
+
+func (k selectDeviceListDelegateKeys) ShortHelp() []key.Binding {
+	return []key.Binding{k.Select, k.Reload}
+}
+
+func (k selectDeviceListDelegateKeys) FullHelp() [][]key.Binding {
+	return [][]key.Binding{k.ShortHelp()}
+}
+
 type DevicesLoadedMsg struct {
 	devices []imaging.Device
 	err     error
 }
 
 func NewSelectDeviceModel(isoPath string) *SelectDeviceModel {
+	// FIXME support reloading
+	delegate := newSelectDeviceListDelegate()
 	m := &SelectDeviceModel{
 		isoPath:    isoPath,
-		deviceList: list.New([]list.Item{}, list.NewDefaultDelegate(), 0, 0), // FIXME
-		//spinner:    spinner.New(spinner.WithSpinner(spinner.Dot)),
+		deviceList: list.New([]list.Item{}, delegate, 0, 0),
 	}
 	// FIXME: m.deviceList.SetSpinner(spinner.Pulse)
 	m.deviceList.Title = "glassUSB Media Creation Wizard - Select target USB drive"
@@ -58,7 +79,6 @@ func (m *SelectDeviceModel) View() tea.View {
 	fullscreenDocStyle := docStyle.Height(m.height).Width(m.width)
 
 	var view string
-	// FIXME: Error state
 	view = fullscreenDocStyle.Render(m.deviceList.View())
 
 	v := tea.NewView(view)
@@ -83,8 +103,13 @@ func (m *SelectDeviceModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.deviceList.SetSize(msg.Width-x, msg.Height-y)
 	case DevicesLoadedMsg:
 		if msg.err != nil {
-			m.err = msg.err
-			return m, nil
+			return switchToModel(NewDialogModel(
+				"glassUSB Media Creation Wizard",
+				"Error loading devices:\n"+msg.err.Error()+
+					"\n\nPlease make sure you have a USB drive connected to your computer and try again.",
+				DialogTypeError,
+				NewSelectDeviceModel(m.isoPath),
+			), m.height, m.width)
 		}
 		m.devices = msg.devices
 
@@ -106,11 +131,18 @@ func (m *SelectDeviceModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, deviceListCmd
 }
 
+func newSelectDeviceListDelegate() list.DefaultDelegate {
+	d := list.NewDefaultDelegate()
+	d.FullHelpFunc = selectDeviceListDelegateKeyMap.FullHelp
+	d.ShortHelpFunc = selectDeviceListDelegateKeyMap.ShortHelp
+	return d
+}
+
 func loadDevices() tea.Msg {
-	time.Sleep(2 * time.Second)
+	time.Sleep(2 * time.Second) // FIXME: Remove this sleep, it's just for testing
 	devices, err := imaging.GetDevices(imaging.SystemPlatform)
 	if err != nil {
 		return DevicesLoadedMsg{err: err}
 	}
-	return DevicesLoadedMsg{devices: devices}
+	return DevicesLoadedMsg{devices: devices, err: errors.New("test")} // FIXME {devices: devices}
 }
