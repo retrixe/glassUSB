@@ -36,9 +36,8 @@ func WriteMBRToDisk(device string) error {
 		return err
 	}
 	defer cleanup()
-	// FIXME: Test if CSM works at all, before experimenting with Rufus MBR (-r)
-	// Switch to Rufus MBR (-r) in the future, as it supports unattended installs
-	// First, we need to test if CSM works at all, before experimenting with Rufus MBR
+	// Rufus MBR (-r) has been tested to work well and supports unattended installs.
+	// By default, one would typically use the `-w` flag to automatically select a Windows-style MBR.
 	if out, err := exec.Command(msSys.Name(), "-r", device).CombinedOutput(); err != nil {
 		return fmt.Errorf("failed to write disk MBR to %s: %w\noutput: %s", device, err, out)
 	}
