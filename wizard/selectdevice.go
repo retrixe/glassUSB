@@ -1,11 +1,9 @@
 package wizard
 
 import (
-	"errors"
-	"time"
-
 	"charm.land/bubbles/v2/key"
 	"charm.land/bubbles/v2/list"
+	"charm.land/bubbles/v2/spinner"
 	tea "charm.land/bubbletea/v2"
 	"github.com/retrixe/imprint/imaging"
 )
@@ -58,13 +56,12 @@ type DevicesLoadedMsg struct {
 }
 
 func NewSelectDeviceModel(isoPath string) *SelectDeviceModel {
-	// FIXME support reloading
 	delegate := newSelectDeviceListDelegate()
 	m := &SelectDeviceModel{
 		isoPath:    isoPath,
 		deviceList: list.New([]list.Item{}, delegate, 0, 0),
 	}
-	// FIXME: m.deviceList.SetSpinner(spinner.Pulse)
+	m.deviceList.SetSpinner(spinner.Line) // Other options could be MiniDot, Pulse, Jump
 	m.deviceList.Title = "glassUSB Media Creation Wizard - Select target USB drive"
 	return m
 }
@@ -91,9 +88,21 @@ func (m *SelectDeviceModel) View() tea.View {
 func (m *SelectDeviceModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyPressMsg:
-		switch msg.String() {
-		case "ctrl+c":
+		switch {
+		case msg.String() == "ctrl+c":
 			return m, tea.Quit
+		case key.Matches(msg, selectDeviceListDelegateKeyMap.Reload):
+			if m.devices != nil {
+				m.devices = nil
+
+				return m, tea.Batch(
+					loadDevices,
+					m.deviceList.StartSpinner(),
+					m.deviceList.SetItems([]list.Item{}),
+				)
+			}
+		case key.Matches(msg, selectDeviceListDelegateKeyMap.Select):
+			// FIXME: Enter logic
 		}
 	case tea.WindowSizeMsg:
 		m.height = msg.Height
@@ -139,10 +148,9 @@ func newSelectDeviceListDelegate() list.DefaultDelegate {
 }
 
 func loadDevices() tea.Msg {
-	time.Sleep(2 * time.Second) // FIXME: Remove this sleep, it's just for testing
 	devices, err := imaging.GetDevices(imaging.SystemPlatform)
 	if err != nil {
 		return DevicesLoadedMsg{err: err}
 	}
-	return DevicesLoadedMsg{devices: devices, err: errors.New("test")} // FIXME {devices: devices}
+	return DevicesLoadedMsg{devices: devices}
 }
