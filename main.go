@@ -80,7 +80,7 @@ func flashWizardUsage() {
 				"Options: exfat, ntfs")
 */
 
-//go:embed binaries/uefi-ntfs.img
+//go:embed binaries/uefi/uefi-ntfs.img
 var UEFI_NTFS_IMG []byte
 
 func init() {
