@@ -9,7 +9,6 @@ import (
 	"os"
 	"os/signal"
 	"runtime"
-	"slices"
 	"strings"
 	"syscall"
 
@@ -118,84 +117,50 @@ func flashCommand(wizard bool) error {
 			dlg.Text(message)
 		}
 	}
+	displayWarning := func(warning string) {
+		zenity.Warning(warning,
+			zenity.Width(640),
+			zenity.WindowIcon(zenity.WarningIcon),
+			zenity.Title("glassUSB Media Creation Wizard"),
+			zenity.Icon(zenity.WarningIcon),
+			zenity.OKLabel("Continue"))
+	}
 	logWarn := func(format string, v ...any) {
 		log.Printf(format, v...)
 		if wizard {
-			zenity.Warning(fmt.Sprintf(format, v...),
-				zenity.Width(640),
-				zenity.WindowIcon(zenity.WarningIcon),
-				zenity.Title("glassUSB Media Creation Wizard"),
-				zenity.Icon(zenity.WarningIcon),
-				zenity.OKLabel("Continue"))
+			displayWarning(fmt.Sprintf(format, v...))
 		}
+	}
+	displayError := func(err error) {
+		zenity.Error(imaging.CapitalizeString(err.Error()),
+			zenity.Width(640),
+			zenity.WindowIcon(zenity.ErrorIcon),
+			zenity.Title("glassUSB Media Creation Wizard"),
+			zenity.Icon(zenity.ErrorIcon),
+			zenity.OKLabel("Exit"))
 	}
 	logError := func(format string, v ...any) error {
 		err := fmt.Errorf(format, v...)
 		if wizard {
-			zenity.Error(imaging.CapitalizeString(err.Error()),
-				zenity.Width(640),
-				zenity.WindowIcon(zenity.ErrorIcon),
-				zenity.Title("glassUSB Media Creation Wizard"),
-				zenity.Icon(zenity.ErrorIcon),
-				zenity.OKLabel("Exit"))
+			displayError(err)
 		}
 		return err
 	}
 
-	// Look for prerequisites on system and change fs flag defaults accordingly
-	fsFlagStruct := flashFlagSet.Lookup("fs")
-	supportedFilesystems := []string{}
-	fullySupportedFsAvailable := false
-	if IsNTFSAvailable() {
-		supportedFilesystems = append(supportedFilesystems, "ntfs")
-		fullySupportedFsAvailable = true
-	}
-	if IsExFATAvailable() {
-		supportedFilesystems = append(supportedFilesystems, "exfat")
-	}
-	if IsFAT32Available() {
-		supportedFilesystems = append(supportedFilesystems, "fat32")
-	}
-	if len(supportedFilesystems) > 0 {
-		fsFlagStruct.DefValue = supportedFilesystems[0]
-		fsFlagStruct.Value.Set(supportedFilesystems[0])
-		fsFlagStruct.Usage = fsFlagStruct.Usage + strings.Join(supportedFilesystems, ", ")
-	}
-
 	// Parse flags
-	flashFlagSet.Parse(os.Args[2:])
+	debugBypassChecks, warning, err := parseFlashFlagSet(wizard)
+	if err != nil {
+		if wizard {
+			displayError(err)
+		}
+		return err
+	} else if warning != "" {
+		log.Println(warning)
+		if wizard {
+			displayWarning(warning)
+		}
+	}
 	args := flashFlagSet.Args()
-	if (wizard && len(args) != 0) || (!wizard && len(args) != 2) {
-		flashFlagSet.Usage()
-		os.Exit(1)
-	} else if fsFlag == nil || (*fsFlag != "exfat" && *fsFlag != "ntfs" && *fsFlag != "fat32" && *fsFlag != "") {
-		log.Println("Invalid value provided for `-fs` flag!")
-		flashFlagSet.Usage()
-		os.Exit(1)
-	} else if *fsFlag == "" {
-		return logError("this system does not have any filesystem drivers supported by glassUSB, exiting...")
-	} else if !slices.Contains(supportedFilesystems, *fsFlag) {
-		return logError("this system does not have drivers for the specified filesystem (%s), exiting...", *fsFlag)
-	}
-	debugBypassChecksEnv := os.Getenv("__GLASSUSB_DEBUG_BYPASS_CHECKS")
-	debugBypassChecks := debugBypassChecksEnv == "true" || debugBypassChecksEnv == "1"
-
-	// Check for root permissions before proceeding
-	if os.Getuid() > 0 && !debugBypassChecks {
-		return logError("glassUSB must be run with root permissions (`sudo`) to write to devices, exiting...")
-	}
-
-	// Warn about exFAT and FAT32 limitations
-	addendum := "If you encounter any issues, try installing NTFS drivers on your system (Paragon NTFS for macOS, ntfs-3g for Linux)."
-	if fullySupportedFsAvailable {
-		addendum = "If you encounter any issues, try using NTFS instead."
-	}
-	switch *fsFlag {
-	case "exfat":
-		logWarn("%s %s", "Warning: Drives formatted with exFAT (--fs=exfat) will not boot on PCs with Secure Boot enabled.", addendum)
-	case "fat32":
-		logWarn("%s %s", "Warning: Using FAT32 (--fs=fat32) may cause flashing to fail for ISOs larger than 4 GB in size.", addendum)
-	}
 
 	// If using the wizard, prompt user for ISO and device
 	if wizard {
@@ -377,7 +342,7 @@ The following device will be converted into a Windows installation USB drive:
 		}
 	}
 
-	err := WriteWindowsISOToBlockDevice(
+	err = WriteWindowsISOToBlockDevice(
 		ctx,
 		args[0], args[1],
 		*gptFlag, *fsFlag, *skipValidationFlag, debugBypassChecks,
