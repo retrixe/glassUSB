@@ -10,7 +10,6 @@ import (
 	"os/signal"
 	"runtime"
 	"slices"
-	"strconv"
 	"strings"
 	"syscall"
 
@@ -353,18 +352,6 @@ The following device will be converted into a Windows installation USB drive:
 		log.Println("Target device path:", args[1])
 	}
 
-	totalPhasesNum := 7
-	if *gptFlag {
-		totalPhasesNum-- // Skip MBR writing phase
-	}
-	if *skipValidationFlag {
-		totalPhasesNum-- // Skip validation phase
-	}
-	if *fsFlag == "fat32" {
-		totalPhasesNum-- // Skip UEFI:NTFS writing phase
-	}
-	totalPhases := strconv.Itoa(totalPhasesNum)
-	currentPhase := 0
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt,
 		syscall.SIGTERM, syscall.SIGINT, syscall.SIGHUP)
 	defer cancel()
@@ -375,210 +362,34 @@ The following device will be converted into a Windows installation USB drive:
 		}
 	}()
 
-	// Step 1: Read ISO
-	currentPhase++
-	logProgress("Phase " + strconv.Itoa(currentPhase) + "/" + totalPhases + ": Reading ISO")
-	file, err := os.Open(args[0])
-	if err != nil {
-		return logError("failed to open ISO: %w", err)
+	// Write Windows ISO to block device
+	logProgressRawStdout := func(log string) {
+		print(log)
 	}
-	defer file.Close()
-	srcStat, err := file.Stat()
-	if err != nil {
-		return logError("failed to stat ISO file: %w", err)
-	}
-	iso, err := OpenWindowsISO(file)
-	if err != nil {
-		return logError("failed to read UDF filesystem on ISO: %w", err)
-	}
-	//totalSize := GetISOContentSize(iso)
-	//log.Println("Total ISO size:", strconv.Itoa(int(totalSize)), "bytes",
-	//	"("+imaging.BytesToString(int(totalSize), false)+", "+imaging.BytesToString(int(totalSize), true)+")")
-	if ctx.Err() != nil {
-		return logError("operation cancelled")
-	}
-
-	// Step 2: Open the block device and create a new partition table
-	blockDevice := args[1]
-	currentPhase++
-	logProgress("Phase " + strconv.Itoa(currentPhase) + "/" + totalPhases + ": Partitioning destination drive")
-	destStat, err := os.Stat(blockDevice)
-	if err != nil {
-		return logError("failed to get info about destination: %w", err)
-	} else if destStat.Mode().Type()&os.ModeDevice == 0 {
-		if !debugBypassChecks {
-			return logError("destination %s is not a valid block device!", blockDevice)
-		}
-	}
-	blockDeviceSize, err := GetBlockDeviceSize(blockDevice)
-	const deviceSizeMargin = 4 * 1024 * 1024 // Extra 4 MB margin for partition table, UEFI:NTFS, etc
-	if err != nil {
-		return logError("failed to get size of destination: %w", err)
-	} else if srcStat.Size()+deviceSizeMargin > blockDeviceSize {
-		if !debugBypassChecks {
-			return logError("cannot write ISO to destination: ISO size (%s) is larger than device size (%s)!",
-				imaging.BytesToString(int(srcStat.Size()), true),
-				imaging.BytesToString(int(blockDeviceSize), true))
-		}
-	}
-	err = imaging.UnmountDevice(blockDevice)
-	if err != nil && err != imaging.ErrNotBlockDevice { // Ignore non-block-device error here
-		return logError("failed to unmount destination device: %w", err)
-	}
-	if ctx.Err() != nil {
-		return logError("operation cancelled")
-	}
-	if *fsFlag == "fat32" {
-		err = FormatDiskForSinglePartition(blockDevice, gptFlag != nil && *gptFlag)
-	} else {
-		err = FormatDiskForUEFINTFS(blockDevice, gptFlag != nil && *gptFlag)
-	}
-	if err != nil {
-		return logError("failed to format disk: %w", err)
-	}
-	if ctx.Err() != nil {
-		return logError("operation cancelled")
-	}
-
-	// Step 3: Write UEFI:NTFS to second partition
-	if *fsFlag != "fat32" {
-		currentPhase++
-		logProgress("Phase " + strconv.Itoa(currentPhase) + "/" + totalPhases + ": Writing UEFI:NTFS bootloader")
-		err = WriteUEFINTFSToPartition(blockDevice, 2)
-		if err != nil {
-			return logError("failed to write UEFI bootloader to second partition: %w", err)
-		}
-		if ctx.Err() != nil {
-			return logError("operation cancelled")
-		}
-	}
-
-	// Step 4: Format primary partition depending on fs flag
-	currentPhase++
-	logProgress("Phase " + strconv.Itoa(currentPhase) + "/" + totalPhases + ": Creating sources partition")
-	primaryPartition := GetBlockDevicePartition(blockDevice, 1)
-	windowsVolumeLabel := iso.GetLogicalVolumeIdentifier()
-	if windowsVolumeLabel == "" {
-		windowsVolumeLabel = "Windows USB"
-	}
-	switch *fsFlag {
-	case "exfat":
-		if err := MakeExFAT(primaryPartition, sanitizeExFATLabel(windowsVolumeLabel)); err != nil {
-			return logError("failed to create exFAT filesystem: %w", err)
-		}
-	case "ntfs":
-		if err := MakeNTFS(primaryPartition, sanitizeNTFSLabel(windowsVolumeLabel)); err != nil {
-			return logError("failed to create NTFS filesystem: %w", err)
-		}
-	case "fat32":
-		if err := MakeFAT32(primaryPartition, sanitizeFATLabel(windowsVolumeLabel)); err != nil {
-			return logError("failed to create FAT32 filesystem: %w", err)
-		}
-	}
-	if ctx.Err() != nil {
-		return logError("operation cancelled")
-	}
-
-	// Step 5: Unpack Windows ISO contents to primary partition
-	if err = func() error {
-		currentPhase++
-		progStr := "Phase " + strconv.Itoa(currentPhase) + "/" + totalPhases + ": Extracting ISO to sources partition"
-		logProgress(progStr)
-		mountPoint, err := os.MkdirTemp(os.TempDir(), "glassusb-")
-		if err != nil {
-			return logError("failed to create mount point: %w", err)
-		}
-		defer os.Remove(mountPoint)
-		if err := MountPartition(primaryPartition, mountPoint); err != nil {
-			return logError("failed to mount partition: %w", err)
-		}
-		defer func() {
-			if err := UnmountPartition(mountPoint); err != nil {
-				logWarn("Failed to unmount partition: %v", err)
+	logProgressDisplayOnly := func(log string) {
+		if dlg != nil {
+			if runtime.GOOS == "linux" {
+				// Hack: Replace newlines with literal \n for zenity on Linux, which seems to not handle newlines in progress dialog text properly
+				// Meanwhile, macOS doesn't even show newlines lol
+				log = strings.ReplaceAll(log, "\n", "\\n")
 			}
-		}()
-		if ctx.Err() != nil {
-			return logError("operation cancelled")
+			dlg.Text(log)
 		}
-		logFn := func(log string) {
-			print(log)
-			if dlg != nil {
-				separator := "\n"
-				if runtime.GOOS == "linux" {
-					// Hack: Replace newlines with literal \n for zenity on Linux, which seems to not handle newlines in progress dialog text properly
-					// Meanwhile, macOS doesn't even show newlines lol
-					separator = "\\n"
-				}
-				dlg.Text(progStr + separator + strings.TrimSpace(log))
-			}
-		}
-		if err := ExtractISOToLocation(ctx, logFn, iso, mountPoint); err != nil {
-			return logError("failed to extract ISO contents: %w", err)
-		}
-		return nil
-	}(); err != nil {
+	}
+
+	err := WriteWindowsISOToBlockDevice(
+		ctx,
+		args[0], args[1],
+		*gptFlag, *fsFlag, *skipValidationFlag, debugBypassChecks,
+		logError, logProgress, logProgressRawStdout, logProgressDisplayOnly, logWarn,
+	)
+	if err != nil {
 		return err
 	}
 
-	// Step 6: Validate Windows ISO contents on primary partition
-	if err = func() error {
-		if *skipValidationFlag {
-			return nil
-		}
-		currentPhase++
-		progStr := "Phase " + strconv.Itoa(currentPhase) + "/" + totalPhases + ": Validating ISO contents on sources partition"
-		logProgress(progStr)
-		mountPoint, err := os.MkdirTemp(os.TempDir(), "glassusb-")
-		if err != nil {
-			return logError("failed to create mount point: %w", err)
-		}
-		defer os.Remove(mountPoint)
-		if err := MountPartition(primaryPartition, mountPoint); err != nil {
-			return logError("failed to mount partition: %w", err)
-		}
-		defer func() {
-			if err := UnmountPartition(mountPoint); err != nil {
-				logWarn("Failed to unmount partition: %v", err)
-			}
-		}()
-		if ctx.Err() != nil {
-			return logError("operation cancelled")
-		}
-		logFn := func(log string) {
-			print(log)
-			if dlg != nil {
-				separator := "\n"
-				if runtime.GOOS == "linux" {
-					// Hack: Replace newlines with literal \n for zenity on Linux, which seems to not handle newlines in progress dialog text properly
-					// Meanwhile, macOS doesn't even show newlines lol
-					separator = "\\n"
-				}
-				dlg.Text(progStr + separator + strings.TrimSpace(log))
-			}
-		}
-		if err := ValidateISOAgainstLocation(ctx, logFn, iso, mountPoint); err != nil {
-			return logError("failed to validate ISO contents: %w", err)
-		}
-		return nil
-	}(); err != nil {
-		return err
-	}
-
-	// Step 7: Write MBR to device for boot using `ms-sys`
-	if gptFlag == nil || !*gptFlag {
-		currentPhase++
-		logProgress("Phase " + strconv.Itoa(currentPhase) + "/" + totalPhases + ": Writing MBR bootloader")
-		if err := WriteVBRToPartition(primaryPartition); err != nil {
-			return logError("failed to write VBR bootloader: %w", err)
-		}
-		if err := WriteMBRToDisk(blockDevice); err != nil {
-			return logError("failed to write MBR bootloader: %w", err)
-		}
-	}
 	signal.Reset(os.Interrupt, syscall.SIGTERM, syscall.SIGINT, syscall.SIGHUP)
-
-	// If dialog, complete it
 	logProgress("The flash process completed successfully! You can now boot from this USB to install Windows.")
+	// If dialog, complete it
 	if dlg != nil {
 		err = dlg.Complete()
 		if err != nil {
