@@ -29,6 +29,7 @@ const (
 	DialogTypeInfo DialogType = iota
 	DialogTypeWarning
 	DialogTypeError
+	DialogTypeSuccess
 )
 
 type dialogKeys struct{ Continue, Quit key.Binding }
@@ -88,6 +89,13 @@ func (m DialogModel) View() tea.View {
 
 	var view string
 	switch m.dialogType {
+	case DialogTypeSuccess:
+		view = fullscreenDialogStyle.BorderForeground(lipgloss.BrightGreen).Render(
+			dialogTitleStyle.Render("glassUSB Media Creation Wizard")+"\n",
+			dialogTitleWithColorStyle(lipgloss.Green).Render("Success!")+"\n\n",
+			m.message+"\n\n",
+			m.help.View(m.keyMap),
+		)
 	case DialogTypeError:
 		view = fullscreenDialogStyle.BorderForeground(lipgloss.Red).Render(
 			dialogTitleStyle.Render("glassUSB Media Creation Wizard")+"\n",
