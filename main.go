@@ -98,7 +98,7 @@ func main() {
 	} else if len(os.Args) >= 2 && os.Args[1] == "wizard" {
 		flashFlagSet.Usage = flashWizardUsage
 		if err := wizardCommand(); err != nil {
-			log.Fatalln(err)
+			os.Exit(1)
 		}
 	} else {
 		flag.Usage()
@@ -172,13 +172,19 @@ func wizardCommand() error {
 		log.Printf(format, v...)
 		displayWarning(fmt.Sprintf(format, v...))
 	}
-	displayError := func(err error) {
+	displayError := func(err error) error {
+		log.Println(err)
 		zenity.Error(imaging.CapitalizeString(err.Error()),
 			zenity.Width(640),
 			zenity.WindowIcon(zenity.ErrorIcon),
 			zenity.Title("glassUSB Media Creation Wizard"),
 			zenity.Icon(zenity.ErrorIcon),
 			zenity.OKLabel("Exit"))
+		return err
+	}
+	logError := func(err error) error {
+		log.Println(err)
+		return err
 	}
 	logProgressRawStdout := func(log string) { print(log) }
 	logProgressDisplayOnly := func(log string) {
@@ -195,8 +201,7 @@ func wizardCommand() error {
 	// Parse flags
 	debugBypassChecks, warning, err := parseFlashFlagSet(true)
 	if err != nil {
-		displayError(err)
-		return err
+		return displayError(err)
 	} else if warning != "" {
 		log.Println(warning)
 		displayWarning(warning)
@@ -217,14 +222,12 @@ Press 'Continue' to select the Windows ISO you downloaded. Supported versions of
 		zenity.CancelLabel("Exit"),
 		zenity.OKLabel("Continue"))
 	if err != nil {
-		return fmt.Errorf("failed to continue with wizard: %w", err)
+		return logError(fmt.Errorf("failed to continue with wizard: %w", err))
 	}
 
 	wd, err := os.Getwd()
 	if err != nil {
-		err = fmt.Errorf("failed to open file dialog: %w", err)
-		displayError(err)
-		return err
+		return displayError(fmt.Errorf("failed to open file dialog: %w", err))
 	}
 	isoPath, err := zenity.SelectFile(
 		zenity.WindowIcon(zenity.QuestionIcon),
@@ -236,16 +239,14 @@ Press 'Continue' to select the Windows ISO you downloaded. Supported versions of
 		},
 	)
 	if err != nil {
-		return fmt.Errorf("failed to continue with wizard: %w", err)
+		return logError(fmt.Errorf("failed to continue with wizard: %w", err))
 	}
 
 	var device, deviceName string
 	for {
 		devices, err := imaging.GetDevices(imaging.SystemPlatform)
 		if err != nil {
-			err = fmt.Errorf("failed to get connected drives: %w", err)
-			displayError(err)
-			return err
+			return displayError(fmt.Errorf("failed to get connected drives: %w", err))
 		} else if len(devices) == 0 {
 			if runtime.GOOS == "linux" { // No extra button on Windows/macOS
 				err = zenity.Error("Failed to find any USB devices connected to your computer.\n\n"+
@@ -266,9 +267,9 @@ Press 'Continue' to select the Windows ISO you downloaded. Supported versions of
 					zenity.OKLabel("Exit"))
 			}
 			if err == nil {
-				return fmt.Errorf("no USB devices connected, exiting...")
+				return logError(fmt.Errorf("no USB devices connected, exiting..."))
 			} else if !errors.Is(err, zenity.ErrExtraButton) {
-				return fmt.Errorf("failed to continue with wizard: %w", err)
+				return logError(fmt.Errorf("failed to continue with wizard: %w", err))
 			}
 			continue
 		}
@@ -312,7 +313,7 @@ Press 'Continue' to select the Windows ISO you downloaded. Supported versions of
 		if errors.Is(err, zenity.ErrExtraButton) {
 			continue
 		} else if err != nil {
-			return fmt.Errorf("failed to continue with wizard: %w", err)
+			return logError(fmt.Errorf("failed to continue with wizard: %w", err))
 		} else if device != "" {
 			deviceName = device[:strings.LastIndex(device, " (")]
 			break
@@ -336,7 +337,7 @@ The following device will be converted into a Windows installation USB drive:
 		zenity.CancelLabel("Exit"),
 		zenity.OKLabel("Continue"))
 	if err != nil {
-		return fmt.Errorf("failed to continue with wizard: %w", err)
+		return logError(fmt.Errorf("failed to continue with wizard: %w", err))
 	}
 
 	dlg, err = zenity.Progress(
@@ -349,7 +350,7 @@ The following device will be converted into a Windows installation USB drive:
 		zenity.CancelLabel("Cancel"),
 		zenity.OKLabel("Finish"))
 	if err != nil {
-		return fmt.Errorf("failed to continue with wizard: %w", err)
+		return logError(fmt.Errorf("failed to continue with wizard: %w", err))
 	}
 	defer dlg.Close()
 
@@ -375,8 +376,7 @@ The following device will be converted into a Windows installation USB drive:
 		logProgress, logProgressRawStdout, logProgressDisplayOnly, logWarn,
 	)
 	if err != nil {
-		displayError(err)
-		return err
+		return displayError(err)
 	}
 
 	signal.Reset(os.Interrupt, syscall.SIGTERM, syscall.SIGINT, syscall.SIGHUP)
@@ -385,7 +385,7 @@ The following device will be converted into a Windows installation USB drive:
 	// Complete the dialog
 	err = dlg.Complete()
 	if err != nil {
-		return fmt.Errorf("failed to complete progress dialog: %w", err)
+		return logError(fmt.Errorf("failed to complete progress dialog: %w", err))
 	}
 	<-ctx.Done() // The context will be cancelled when dlg.Done() by the goroutine fired earlier
 
