@@ -93,7 +93,7 @@ func main() {
 		return
 	} else if len(os.Args) >= 2 && os.Args[1] == "flash" {
 		if err := flashCommand(); err != nil {
-			log.Fatalln(err)
+			os.Exit(1)
 		}
 	} else if len(os.Args) >= 2 && os.Args[1] == "wizard" {
 		flashFlagSet.Usage = flashWizardUsage
@@ -110,14 +110,11 @@ func flashCommand() error {
 	log.SetFlags(0)
 	log.SetOutput(os.Stderr)
 	log.SetPrefix("[glassUSB] ")
-	logWarn := log.Printf
-	logProgress := func(message string) { log.Println(message) }
-	logProgressRawStdout := func(log string) { print(log) }
-	logProgressDisplayOnly := func(log string) {}
 
 	// Parse flags
 	debugBypassChecks, warning, err := parseFlashFlagSet(false)
 	if err != nil {
+		log.Println(err)
 		return err
 	} else if warning != "" {
 		log.Println(warning)
@@ -132,6 +129,10 @@ func flashCommand() error {
 	defer cancel()
 
 	// Write Windows ISO to block device
+	logWarn := log.Printf
+	logProgress := func(message string) { log.Println(message) }
+	logProgressRawStdout := func(log string) { print(log) }
+	logProgressDisplayOnly := func(log string) {}
 	err = WriteWindowsISOToBlockDevice(
 		ctx,
 		args[0], args[1],
@@ -139,11 +140,12 @@ func flashCommand() error {
 		logProgress, logProgressRawStdout, logProgressDisplayOnly, logWarn,
 	)
 	if err != nil {
+		log.Println(err)
 		return err
 	}
 
 	signal.Reset(os.Interrupt, syscall.SIGTERM, syscall.SIGINT, syscall.SIGHUP)
-	logProgress("The flash process completed successfully! You can now boot from this USB to install Windows.")
+	log.Println("The flash process completed successfully! You can now boot from this USB to install Windows.")
 	return nil
 }
 
