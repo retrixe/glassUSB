@@ -111,7 +111,6 @@ func flashCommand() error {
 	log.SetOutput(os.Stderr)
 	log.SetPrefix("[glassUSB] ")
 	logWarn := log.Printf
-	logError := fmt.Errorf
 	logProgress := func(message string) { log.Println(message) }
 	logProgressRawStdout := func(log string) { print(log) }
 	logProgressDisplayOnly := func(log string) {}
@@ -137,7 +136,7 @@ func flashCommand() error {
 		ctx,
 		args[0], args[1],
 		*gptFlag, *fsFlag, *skipValidationFlag, debugBypassChecks,
-		logError, logProgress, logProgressRawStdout, logProgressDisplayOnly, logWarn,
+		logProgress, logProgressRawStdout, logProgressDisplayOnly, logWarn,
 	)
 	if err != nil {
 		return err
@@ -179,14 +178,7 @@ func wizardCommand() error {
 			zenity.Icon(zenity.ErrorIcon),
 			zenity.OKLabel("Exit"))
 	}
-	logError := func(format string, v ...any) error {
-		err := fmt.Errorf(format, v...)
-		displayError(err)
-		return err
-	}
-	logProgressRawStdout := func(log string) {
-		print(log)
-	}
+	logProgressRawStdout := func(log string) { print(log) }
 	logProgressDisplayOnly := func(log string) {
 		if dlg != nil {
 			if runtime.GOOS == "linux" {
@@ -228,7 +220,9 @@ Press 'Continue' to select the Windows ISO you downloaded. Supported versions of
 
 	wd, err := os.Getwd()
 	if err != nil {
-		return logError("failed to open file dialog: %w", err)
+		err = fmt.Errorf("failed to open file dialog: %w", err)
+		displayError(err)
+		return err
 	}
 	isoPath, err := zenity.SelectFile(
 		zenity.WindowIcon(zenity.QuestionIcon),
@@ -247,7 +241,9 @@ Press 'Continue' to select the Windows ISO you downloaded. Supported versions of
 	for {
 		devices, err := imaging.GetDevices(imaging.SystemPlatform)
 		if err != nil {
-			return logError("failed to get connected drives: %w", err)
+			err = fmt.Errorf("failed to get connected drives: %w", err)
+			displayError(err)
+			return err
 		} else if len(devices) == 0 {
 			if runtime.GOOS == "linux" { // No extra button on Windows/macOS
 				err = zenity.Error("Failed to find any USB devices connected to your computer.\n\n"+
@@ -374,9 +370,10 @@ The following device will be converted into a Windows installation USB drive:
 		ctx,
 		args[0], args[1],
 		*gptFlag, *fsFlag, *skipValidationFlag, debugBypassChecks,
-		logError, logProgress, logProgressRawStdout, logProgressDisplayOnly, logWarn,
+		logProgress, logProgressRawStdout, logProgressDisplayOnly, logWarn,
 	)
 	if err != nil {
+		displayError(err)
 		return err
 	}
 
