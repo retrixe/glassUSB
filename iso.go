@@ -125,7 +125,7 @@ func extractISOFileToLocation(ctx context.Context, file udf.File, location strin
 		buf := make([]byte, 4*1024*1024)
 		src := file.NewReader()
 		dst := newFile
-		syncInterval := 8
+		syncInterval := 4
 		// Extracted from io.CopyBuffer
 		// errInvalidWrite means that a write returned an impossible count.
 		var errInvalidWrite = errors.New("invalid write result")
