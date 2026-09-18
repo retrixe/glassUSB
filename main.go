@@ -14,7 +14,9 @@ import (
 
 	_ "embed"
 
+	tea "charm.land/bubbletea/v2"
 	"github.com/ncruces/zenity"
+	"github.com/retrixe/glassusb/wizard"
 	"github.com/retrixe/imprint/imaging"
 )
 
@@ -97,9 +99,12 @@ func main() {
 		}
 	} else if len(os.Args) >= 2 && os.Args[1] == "wizard" {
 		flashFlagSet.Usage = flashWizardUsage
-		if err := wizardCommand(); err != nil {
-			os.Exit(1)
+		p := tea.NewProgram(wizard.InitialModel())
+		_, err := p.Run()
+		if err != nil {
+			log.Fatalln(err)
 		}
+		// flashCommand(true) // FIXME: Pass parameters from model and trash the zenity code
 	} else {
 		flag.Usage()
 		os.Exit(1)
