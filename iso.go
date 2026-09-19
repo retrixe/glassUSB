@@ -80,9 +80,9 @@ func logProgressPerSecond(ctx context.Context, logFn func(string), action string
 	for {
 		select {
 		case <-ticker.C:
-			logFn(imaging.FormatProgress(int(progress.Load()), time.Now().UnixMilli()-startTime, action, false) + "\r")
+			logFn(imaging.FormatProgress(progress.Load(), time.Now().UnixMilli()-startTime, action, false) + "\r")
 		case <-ctx.Done():
-			logFn(imaging.FormatProgress(int(progress.Load()), time.Now().UnixMilli()-startTime, action, true) + "\n")
+			logFn(imaging.FormatProgress(progress.Load(), time.Now().UnixMilli()-startTime, action, true) + "\n")
 			return
 		}
 	}

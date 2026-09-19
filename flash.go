@@ -134,8 +134,8 @@ func WriteWindowsISOToBlockDevice(
 	} else if srcStat.Size()+deviceSizeMargin > blockDeviceSize {
 		if !debugBypassChecks {
 			return fmt.Errorf("cannot write ISO to destination: ISO size (%s) is larger than device size (%s)!",
-				imaging.BytesToString(int(srcStat.Size()), true),
-				imaging.BytesToString(int(blockDeviceSize), true))
+				imaging.BytesToString(srcStat.Size(), true),
+				imaging.BytesToString(blockDeviceSize, true))
 		}
 	}
 	err = imaging.UnmountDevice(blockDevice)
