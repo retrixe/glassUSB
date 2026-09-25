@@ -90,6 +90,7 @@ func FormatDiskForSinglePartition(name string, useGpt bool) error {
 	if err := disk.Partition(table); err != nil {
 		return fmt.Errorf("failed to create partition table: %w", err)
 	}
+	// TODO: Explore `udevadm settle` on Linux systems here and below
 	time.Sleep(time.Second) // Wait for the OS to recognize the new partition table
 	return nil
 }

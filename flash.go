@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/retrixe/imprint/imaging"
 )
@@ -127,6 +128,13 @@ func WriteWindowsISOToBlockDevice(
 			return fmt.Errorf("destination %s is not a valid block device!", blockDevice)
 		}
 	}
+	lockCtx, lockCancel := context.WithTimeout(ctx, 30*time.Second)
+	deviceLock, err := imaging.AcquireDeviceLock(lockCtx, blockDevice)
+	lockCancel()
+	if err != nil {
+		return fmt.Errorf("failed to acquire lock on block device: %w", err)
+	}
+	defer deviceLock.Release()
 	blockDeviceSize, err := GetBlockDeviceSize(blockDevice)
 	const deviceSizeMargin = 4 * 1024 * 1024 // Extra 4 MB margin for partition table, UEFI:NTFS, etc
 	if err != nil {
